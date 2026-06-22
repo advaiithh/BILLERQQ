@@ -1,0 +1,32 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><link rel="icon" href="/favicon.png"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="theme-color" content="#000000"/><meta name="description" content="Web site created using create-react-app"/><link rel="manifest" href="/manifest.json"/><link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/><link href="https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap" rel="stylesheet"/><script src="https://checkout.razorpay.com/v1/checkout.js"></script><title>BillerQ</title><script defer="defer" src="/static/js/main.c2891d24.js"></script><link href="/static/css/main.f8e164c3.css" rel="stylesheet"></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id="root"></div><div id="billerq-ai-iframe-container" style="position: fixed; bottom: 0; right: 0; width: 120px; height: 120px; z-index: 999999; border: none; overflow: hidden; background: transparent; transition: width 0.3s, height 0.3s;">
+    <iframe id="billerq-ai-iframe" src="http://localhost:8080/widget" style="width: 100%; height: 100%; border: none; background: transparent;"></iframe>
+</div>
+<script>
+    window.addEventListener('message', (event) => {
+        const iframe = document.getElementById('billerq-ai-iframe');
+        const container = document.getElementById('billerq-ai-iframe-container');
+        if (!iframe || !container) return;
+
+        if (event.data && event.data.type === 'widget-ready') {
+            // Read profile from localStorage
+            let profile = null;
+            try {
+                profile = JSON.parse(localStorage.getItem('AdminProfile'));
+            } catch(e) {}
+            
+            // Send to iframe
+            iframe.contentWindow.postMessage({ type: 'billerq-auth', profile: profile }, '*');
+        } else if (event.data && event.data.type === 'toggle-chat') {
+            if (event.data.open) {
+                // Expanded size to hold the chat widget
+                container.style.width = '450px';
+                container.style.height = '750px';
+            } else {
+                // Collapsed size to just show the toggle button
+                container.style.width = '120px';
+                container.style.height = '120px';
+            }
+        }
+    });
+</script>
+</body></html>
