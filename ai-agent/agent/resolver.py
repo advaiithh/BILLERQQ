@@ -31,10 +31,25 @@ class Resolver:
                 - "candidates": list (if multiple matches)
                 - "error": str (if not found)
         """
-        logger.info("Resolving customer: '%s'", name)
+        # Clean up common prefixes from the search name (e.g., "subscriber 1322" -> "1322")
+        cleaned_name = name.strip()
+        for prefix in [
+            "subscriber id ", "subscriber id", 
+            "subscriber no ", "subscriber no", 
+            "subscriber ", 
+            "sub id ", "sub id", 
+            "customer id ", "customer id", 
+            "customer ", 
+            "id "
+        ]:
+            if cleaned_name.lower().startswith(prefix):
+                cleaned_name = cleaned_name[len(prefix):].strip()
+                break
+
+        logger.info("Resolving customer: '%s' (cleaned: '%s')", name, cleaned_name)
 
         try:
-            response = await search_customer(name)
+            response = await search_customer(cleaned_name)
         except Exception as e:
             logger.error("Customer search API failed: %s", str(e))
             return {
@@ -57,7 +72,7 @@ class Resolver:
             return self._build_found_result(customer)
 
         # Multiple results — try to find the best match
-        best = self._find_best_match(customers, name)
+        best = self._find_best_match(customers, cleaned_name)
         if best:
             return self._build_found_result(best)
 

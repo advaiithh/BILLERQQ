@@ -13,7 +13,7 @@
             try {
                 const loginStr = localStorage.getItem('login');
                 if (loginStr) {
-                    const decrypted = CryptoJS.AES.decrypt(loginStr, 'your-secret-key').toString(CryptoJS.enc.Utf8);
+                    const decrypted = CryptoJS.AES.decrypt(loginStr, '6Lf2jgMqAAAAACyRDVxBwemO3J5uxCMKyvzIvNbV').toString(CryptoJS.enc.Utf8);
                     if (decrypted) {
                         const loginData = JSON.parse(decrypted);
                         token = loginData.userToken;

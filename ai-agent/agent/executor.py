@@ -203,6 +203,43 @@ class Executor:
         if intent == "COMPLAINTS":
             complaints_data = await complaints.get_complaints()
             status_count = await complaints.get_complaint_status_count()
+            
+            # Clean up/minimize complaints_data to prevent payload truncation
+            if isinstance(complaints_data, dict) and "data" in complaints_data:
+                inner_data = complaints_data["data"]
+                if isinstance(inner_data, dict) and "data" in inner_data:
+                    complaints_list = inner_data["data"]
+                    if isinstance(complaints_list, list):
+                        cleaned_list = []
+                        for comp in complaints_list:
+                            cleaned_comp = {
+                                "id": comp.get("id"),
+                                "complaint_no": comp.get("complaint_no"),
+                                "customer_name": comp.get("customer_name"),
+                                "problem_type": comp.get("problem_type"),
+                                "status": comp.get("status"),
+                                "area_name": comp.get("area_name"),
+                                "subscriber_id": comp.get("subscriber_id"),
+                                "phone": comp.get("phone"),
+                                "assigned_user": comp.get("assigned_user"),
+                                "formatted_created_at": comp.get("formatted_created_at"),
+                                "updated_at": comp.get("updated_at"),
+                            }
+                            # Clean up the complaint forum comments
+                            forum = comp.get("complaint_forum")
+                            if isinstance(forum, list):
+                                cleaned_forum = []
+                                for f in forum:
+                                    cleaned_forum.append({
+                                        "comments": f.get("comments"),
+                                        "status": f.get("status"),
+                                        "updated_date": f.get("updated_date"),
+                                        "updated_by": f.get("updated_by"),
+                                    })
+                                cleaned_comp["complaint_forum"] = cleaned_forum
+                            cleaned_list.append(cleaned_comp)
+                        inner_data["data"] = cleaned_list
+
             return {
                 "complaints": complaints_data,
                 "status_count": status_count,
