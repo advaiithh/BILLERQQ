@@ -23,6 +23,24 @@ def _load_prompt():
     return _FORMATTER_SYSTEM_PROMPT
 
 
+def sanitize_and_truncate_data(data, max_list_len=5):
+    """Recursively traverses data to truncate lists to a maximum length to prevent context limit errors."""
+    if isinstance(data, list):
+        if len(data) > max_list_len:
+            truncated = [sanitize_and_truncate_data(item, max_list_len) for item in data[:max_list_len]]
+            truncated.append(f"... ({len(data) - max_list_len} more items truncated)")
+            return truncated
+        return [sanitize_and_truncate_data(item, max_list_len) for item in data]
+    
+    if isinstance(data, dict):
+        return {
+            k: sanitize_and_truncate_data(v, max_list_len)
+            for k, v in data.items()
+        }
+        
+    return data
+
+
 class Formatter:
     """Formats raw API data into user-friendly chat responses."""
 
@@ -76,8 +94,9 @@ class Formatter:
         """Use the LLM to format complex data into readable text."""
         system_prompt = _load_prompt()
 
-        # Truncate data if too large (keep LLM context manageable)
-        data_str = json.dumps(data, indent=2, default=str)
+        # Intelligently truncate lists to keep JSON structure and other keys intact
+        truncated_data = sanitize_and_truncate_data(data, max_list_len=5)
+        data_str = json.dumps(truncated_data, indent=2, default=str)
         if len(data_str) > 4000:
             data_str = data_str[:4000] + "\n... (data truncated for brevity)"
 

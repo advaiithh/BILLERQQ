@@ -32,7 +32,7 @@ Your ONLY job is to analyze the user's message and output a structured JSON plan
 ## Entity Extraction
 
 Extract these entities when present:
-- customer_name: The customer's name (string)
+- customer_name: The customer's name or subscriber ID (string)
 - customer_names: Multiple customer names for comparison (array of strings)
 - area_name: Area/zone name (string)
 - report_type: Which report — "package", "wallet", "tax", "subscription", "addon", "income", "expense", "collection" (string)

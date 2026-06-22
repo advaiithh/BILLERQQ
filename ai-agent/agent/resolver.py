@@ -113,25 +113,38 @@ class Resolver:
         return []
 
     def _find_best_match(self, customers: list, name: str) -> Optional[dict]:
-        """Find the best matching customer by name similarity.
+        """Find the best matching customer by name, subscriber_id, or mobile similarity.
 
         Uses case-insensitive exact match first, then substring match.
         """
         name_lower = name.lower().strip()
 
-        # Pass 1: exact match on name
+        # Pass 1: exact match on subscriber_id
+        for c in customers:
+            c_sub = str(c.get("subscriber_id") or "").lower().strip()
+            if c_sub == name_lower:
+                return c
+
+        # Pass 2: exact match on mobile
+        for c in customers:
+            c_mob = str(c.get("mobile") or c.get("phone") or "").lower().strip()
+            # Remove country code prefix if query doesn't have it, or vice versa
+            if c_mob == name_lower or c_mob.endswith(name_lower) or name_lower.endswith(c_mob):
+                return c
+
+        # Pass 3: exact match on name
         for c in customers:
             c_name = (c.get("name") or c.get("customer_name") or "").lower().strip()
             if c_name == name_lower:
                 return c
 
-        # Pass 2: name starts with query
+        # Pass 4: name starts with query
         for c in customers:
             c_name = (c.get("name") or c.get("customer_name") or "").lower().strip()
             if c_name.startswith(name_lower):
                 return c
 
-        # Pass 3: query is contained in name
+        # Pass 5: query is contained in name
         for c in customers:
             c_name = (c.get("name") or c.get("customer_name") or "").lower().strip()
             if name_lower in c_name:
