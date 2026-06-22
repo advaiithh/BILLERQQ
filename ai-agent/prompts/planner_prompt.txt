@@ -13,7 +13,7 @@ Your ONLY job is to analyze the user's message and output a structured JSON plan
 
 ## Supported Intents
 
-- CUSTOMER_SEARCH — Find or show a customer by name, mobile, or ID
+- CUSTOMER_SEARCH — Find or show a customer by name, mobile, or ID, or list/show customer names/list generally (e.g., "show customer names", "show me some of the customers", "show top 5 customer names", "list customers")
 - CUSTOMER_PROFILE — Get detailed profile of a specific customer
 - PAYMENT_HISTORY — Get payment history for a customer
 - RECENT_PAYMENTS — Show recent payments across the system
@@ -106,6 +106,21 @@ User: "show details of subscriber 1322"
 User: "what about the subscriber id 1322?"
 ```json
 {"intent": "CUSTOMER_PROFILE", "entities": {"customer_name": "1322", "customer_names": null, "area_name": null, "report_type": null, "mobile": null}, "uses_context": false, "confidence": 0.95}
+```
+
+User: "show customer names"
+```json
+{"intent": "CUSTOMER_SEARCH", "entities": {"customer_name": null, "customer_names": null, "area_name": null, "report_type": null, "mobile": null}, "uses_context": false, "confidence": 0.95}
+```
+
+User: "show me some of the customers"
+```json
+{"intent": "CUSTOMER_SEARCH", "entities": {"customer_name": null, "customer_names": null, "area_name": null, "report_type": null, "mobile": null}, "uses_context": false, "confidence": 0.95}
+```
+
+User: "show top 5 customer names"
+```json
+{"intent": "CUSTOMER_SEARCH", "entities": {"customer_name": null, "customer_names": null, "area_name": null, "report_type": null, "mobile": null}, "uses_context": false, "confidence": 0.95}
 ```
 
 Now analyze the following user message and output ONLY a JSON plan:
