@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BillerQ AI Assistant</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         /* ============================================================
            CSS Variables & Reset
@@ -652,12 +653,16 @@
                 let userToken = parentToken;
                 if (!userToken) {
                     try {
-                        const profile = JSON.parse(localStorage.getItem('AdminProfile'));
-                        if (profile && profile.token) {
-                            userToken = profile.token;
+                        const loginStr = localStorage.getItem('login');
+                        if (loginStr) {
+                            const decrypted = CryptoJS.AES.decrypt(loginStr, 'your-secret-key').toString(CryptoJS.enc.Utf8);
+                            if (decrypted) {
+                                const loginData = JSON.parse(decrypted);
+                                userToken = loginData.userToken;
+                            }
                         }
                     } catch (e) {
-                        console.error('BillerQ AI: Failed to read token from AdminProfile in localStorage', e);
+                        console.error('BillerQ AI: Failed to read token from login in localStorage', e);
                     }
                 }
 
