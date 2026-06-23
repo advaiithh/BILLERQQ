@@ -140,7 +140,11 @@ The main BillerQ React web application layout template. It hosts the chat assist
 
 ## 3. API Fetching and Authentication Flow
 
-The backend handles authentication dynamically so that admins do not need to manually configure keys:
+The backend handles authentication dynamically so that admins do not need to manually configure credentials in `.env` if a user is logged in to the BillerQ site:
+
+*   **Bypassing `.env` Credentials (BillerQ Site Session)**: If the user is logged in on BillerQ, the widget dynamically extracts their active token (`userToken`) and forwards it to the `/chat` API endpoint. The backend detects this incoming token and bypasses the `BILLERQ_LOGIN_EMAIL` and `BILLERQ_LOGIN_PASSWORD` check completely, routing all queries directly to the standard customer tenant URL (`https://customer.billerq.com/public/api`) with their session token.
+*   **Auto-Login Fallback (Standalone Development)**: If no token is provided from the frontend, the backend client automatically falls back to credentials-based authentication using `BILLERQ_LOGIN_EMAIL` and `BILLERQ_LOGIN_PASSWORD` configured in `.env`.
+
 
 ### Dynamic Login & Tenant Redirection
 BillerQ hosts customer data on company-specific tenant URLs (e.g., `https://customer.billerq.com`).
