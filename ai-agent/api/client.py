@@ -225,8 +225,14 @@ class BillerQClient:
         Raises:
             RuntimeError: If all retry attempts fail.
         """
-        # Ensure we have logged in at least once to resolve the tenant base URL
-        await self._ensure_token()
+        # If an override token is provided from the frontend session, we bypass
+        # credentials login and direct the requests to the standard customer tenant API.
+        if override_token:
+            if "admin.billerq.com" in self.base_url:
+                self.base_url = "https://customer.billerq.com/public/api"
+        else:
+            # Ensure we have logged in at least once to resolve the tenant base URL
+            await self._ensure_token()
 
         # Clean up the endpoint path
         req_endpoint = endpoint
