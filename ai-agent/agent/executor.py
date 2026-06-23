@@ -50,7 +50,7 @@ class Executor:
 
             if intent in self._CUSTOMER_INTENTS:
                 resolution = await self._resolve_customer_from_plan(
-                    entities, uses_context, memory
+                    entities, uses_context, memory, intent
                 )
                 if not resolution["found"]:
                     return {
@@ -89,7 +89,7 @@ class Executor:
     }
 
     async def _resolve_customer_from_plan(
-        self, entities: dict, uses_context: bool, memory
+        self, entities: dict, uses_context: bool, memory, intent: str = ""
     ) -> dict:
         """Resolve customer from entities or conversation context.
 
@@ -123,6 +123,15 @@ class Executor:
                     "customer_data": None,
                 }
 
+        # Bypass name requirement for general customer lists/searches (no query provided)
+        if intent == "CUSTOMER_SEARCH" and not uses_context:
+            return {
+                "found": True,
+                "customer_id": None,
+                "customer_name": None,
+                "customer_data": None,
+            }
+
         return {
             "found": False,
             "error": "I need a customer name to help with that. Could you tell me which customer you're asking about?",
@@ -144,6 +153,9 @@ class Executor:
             if customer_id:
                 return await customer.get_customer_profile(customer_id)
             query = entities.get("customer_name") or entities.get("mobile", "")
+            if not query:
+                # Retrieve the first page of customer list
+                return await customer.get_all_customers(page=1)
             return await customer.search_customer(query)
 
         if intent == "CUSTOMER_PROFILE":
