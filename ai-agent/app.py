@@ -11,6 +11,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -100,6 +101,49 @@ executor = Executor()
 formatter = Formatter(llm)
 
 
+def _build_redirect_metadata(intent: str, plan: dict, result: dict, customer_id: str | None):
+    """Map intent/plan/result to a frontend route and label for quick navigation.
+
+    Returns a dict with optional `redirect_url` and `redirect_label`.
+    """
+    if not intent:
+        return {}
+
+    # Normalize
+    intent = intent.upper()
+
+    # Reports mapping by report_type entity
+    report_map = {
+        "package": "/report/package-summary",
+        "wallet": "/report/wallet-balance",
+        "tax": "/report/tax-report",
+    }
+
+    # Intent -> route
+    if intent == "ACTIVE_CUSTOMERS":
+        return {"redirect_url": "/customers/customer", "redirect_label": "View customers"}
+    if intent == "REPORT":
+        report_type = (plan or {}).get("entities", {}).get("report_type")
+        if report_type and report_type in report_map:
+            return {"redirect_url": report_map[report_type], "redirect_label": "View report"}
+        return {"redirect_url": "/report/package-summary", "redirect_label": "View report"}
+    if intent == "UNPAID_CUSTOMERS":
+        return {"redirect_url": "/report/unpaid-customer", "redirect_label": "View unpaid customers"}
+    if intent == "OVERDUE":
+        return {"redirect_url": "/report/payment-due", "redirect_label": "View overdue payments"}
+    if intent == "ANALYTICS":
+        return {"redirect_url": "/dashboard/default", "redirect_label": "Open analytics"}
+    if intent in ("INVOICE_DETAIL", "INVOICE_SUMMARY"):
+        invoice_id = (result or {}).get("invoice_id")
+        if customer_id and invoice_id:
+            return {
+                "redirect_url": f"/customers/{customer_id}/invoices/{invoice_id}",
+                "redirect_label": "View invoice",
+            }
+
+    return {}
+
+
 # ---------------------------------------------------------------------------
 # Request / Response Models
 # ---------------------------------------------------------------------------
@@ -132,6 +176,12 @@ async def health_check():
         "service": "BillerQ AI Assistant",
         "active_sessions": memory_manager.active_sessions,
     }
+
+
+@app.get("/", include_in_schema=False)
+async def root_redirect():
+    """Redirect root to the chat widget for convenience in local development."""
+    return RedirectResponse(url="/widget")
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -186,6 +236,20 @@ async def chat(request: ChatRequest):
                 metadata={"intent": "UNKNOWN", "plan": plan},
             )
 
+        # If frontend did not provide a BillerQ token and auto-login is disabled,
+        # inform the user that manual login is required.
+        if not request.billerq_token and not api_client.auto_login:
+            response_text = (
+                "Please log in to BillerQ first. Use the login panel in the widget "
+                "or send a valid frontend session token."
+            )
+            memory.add_turn(message, response_text)
+            return ChatResponse(
+                response=response_text,
+                session_id=session_id,
+                metadata={"error": "login_required"},
+            )
+
         # Step 4: Execute — call the right API(s)
         result = await executor.execute(plan, memory, billerq_token=request.billerq_token)
 
@@ -215,14 +279,22 @@ async def chat(request: ChatRequest):
         memory.update_intent(intent)
         memory.add_turn(message, response_text)
 
+        # Build optional redirect metadata for the frontend widget
+        redirect_metadata = _build_redirect_metadata(
+            intent=intent, plan=plan, result=result, customer_id=result.get("customer_id")
+        )
+
+        metadata = {
+            "intent": intent,
+            "customer_id": result.get("customer_id"),
+            "customer_name": result.get("customer_name"),
+        }
+        metadata.update(redirect_metadata or {})
+
         return ChatResponse(
             response=response_text,
             session_id=session_id,
-            metadata={
-                "intent": intent,
-                "customer_id": result.get("customer_id"),
-                "customer_name": result.get("customer_name"),
-            },
+            metadata=metadata,
         )
 
     except Exception as e:
@@ -243,3 +315,26 @@ async def serve_widget():
     if os.path.exists(widget_path):
         return FileResponse(widget_path, media_type="text/html")
     raise HTTPException(status_code=404, detail="Chat widget not found")
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(..., description="BillerQ login email")
+    password: str = Field(..., description="BillerQ login password")
+
+
+class LoginResponse(BaseModel):
+    token: str = Field(..., description="BillerQ bearer token")
+    message: str = Field(..., description="Login status message")
+
+
+@app.post("/login", response_model=LoginResponse)
+async def login(payload: LoginRequest):
+    """Manual login endpoint for BillerQ credentials."""
+    try:
+        token = await api_client.login(payload.email, payload.password)
+        return LoginResponse(
+            token=token,
+            message="Login successful. Use this token for subsequent /chat requests.",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))

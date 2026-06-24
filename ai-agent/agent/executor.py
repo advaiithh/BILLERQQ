@@ -5,13 +5,79 @@ Maps intent → tool function, handles customer resolution,
 and returns raw API data for the formatter.
 """
 
+import os
 import logging
 
+from dotenv import load_dotenv
 from agent.resolver import resolver
 from tools import customer, payment, subscription, reports, complaints
 from api.client import api_client
 
+load_dotenv()
+
 logger = logging.getLogger(__name__)
+
+# Demo mode: return mock data instead of calling real API (for local development)
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+
+
+def _get_demo_data(intent: str) -> dict:
+    """Return mock data for demo/dev mode."""
+    demo_responses = {
+        "ACTIVE_CUSTOMERS": {
+            "total_customers": 1926,
+            "active_customers": 1771,
+            "inactive_customers": 155,
+            "percentage": 92,
+        },
+        "RECENT_PAYMENTS": {
+            "data": [
+                {"id": 1, "customer_name": "John Doe", "amount": 1500, "date": "2026-06-23"},
+                {"id": 2, "customer_name": "Jane Smith", "amount": 2000, "date": "2026-06-22"},
+            ]
+        },
+        "UNPAID_CUSTOMERS": {
+            "data": [
+                {"customer_id": 5, "customer_name": "Bob Wilson", "outstanding": 5000},
+                {"customer_id": 6, "customer_name": "Alice Johnson", "outstanding": 3500},
+            ]
+        },
+        "OVERDUE": {
+            "data": [
+                {"customer_id": 7, "customer_name": "Charlie Brown", "days_overdue": 15, "amount": 2500},
+                {"customer_id": 8, "customer_name": "Diana Prince", "days_overdue": 8, "amount": 1800},
+            ]
+        },
+        "COMPLAINTS": {
+            "complaints": {
+                "data": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "complaint_no": "C001",
+                            "customer_name": "John Doe",
+                            "problem_type": "Technical",
+                            "status": "Pending",
+                        },
+                        {
+                            "id": 2,
+                            "complaint_no": "C002",
+                            "customer_name": "Jane Smith",
+                            "problem_type": "Billing",
+                            "status": "Resolved",
+                        },
+                    ]
+                }
+            },
+            "status_count": {"Pending": 3, "Resolved": 7},
+        },
+        "ANALYTICS": {
+            "dashboard": {"total_revenue": 150000, "subscriptions": 500},
+            "connections": {"active": 1771, "inactive": 155},
+            "customer_status": {"active": 1771, "inactive": 155},
+        },
+    }
+    return demo_responses.get(intent, {"message": "Demo data for " + intent})
 
 
 class Executor:
@@ -148,6 +214,11 @@ class Executor:
         Returns:
             Raw API response data.
         """
+        # If demo mode is on, return mock data instead of calling real API
+        if DEMO_MODE:
+            logger.info("DEMO_MODE=true: returning mock data for intent %s", intent)
+            return _get_demo_data(intent)
+
         # ----- Customer Intents -----
         if intent == "CUSTOMER_SEARCH":
             if customer_id:

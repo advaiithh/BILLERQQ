@@ -47,6 +47,7 @@ class BillerQClient:
             self.industry_id = int(os.getenv("BILLERQ_INDUSTRY_ID", "1"))
         except ValueError:
             self.industry_id = 1
+        self.auto_login = os.getenv("BILLERQ_AUTO_LOGIN", "false").lower() == "true"
         self.timeout = 30.0
         self.max_retries = 3
         self._client: Optional[httpx.AsyncClient] = None
@@ -64,6 +65,11 @@ class BillerQClient:
         """Ensure we have a valid bearer token, logging in if needed."""
         if self._token:
             return
+        if not self.auto_login:
+            raise RuntimeError(
+                "Auto login is disabled. Provide a BillerQ session token "
+                "via the frontend session or call /login with valid credentials."
+            )
         await self._login()
 
     async def _login(self):
@@ -149,7 +155,33 @@ class BillerQClient:
                 logger.error("Login failed: %s", str(e))
                 raise RuntimeError(f"BillerQ login failed: {str(e)}") from e
 
+    def set_credentials(self, email: str, password: str) -> None:
+        """Set BillerQ login credentials for manual login."""
+        self.login_email = email.strip()
+        self.login_password = password.strip()
+        self._token = None
+
+
+    async def login(self, email: str, password: str) -> str:
+        """Authenticate with the provided email/password and return the bearer token."""
+        self.set_credentials(email, password)
+        await self._login()
+        return self._token
+    
     def _get_headers(self, override_token: Optional[str] = None) -> dict:
+        """Build request headers with Bearer token.
+
+        Args:
+            override_token: If provided, use this token instead of the agent's own.
+        """
+        token = override_token or self._token
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return headers
         """Build request headers with Bearer token.
 
         Args:
@@ -225,8 +257,9 @@ class BillerQClient:
         Raises:
             RuntimeError: If all retry attempts fail.
         """
-        # Ensure we have logged in at least once to resolve the tenant base URL
-        await self._ensure_token()
+        # Only ensure an internal token when no override token is being used.
+        if override_token is None:
+            await self._ensure_token()
 
         # Clean up the endpoint path
         req_endpoint = endpoint
