@@ -186,6 +186,25 @@
             animation: blink 2s ease-in-out infinite;
         }
 
+        .auth-warning {
+            padding: 14px 18px;
+            border-radius: var(--radius-sm);
+            margin: 0 20px 16px;
+            background: rgba(229, 102, 102, 0.12);
+            color: #ffb3b3;
+            border: 1px solid rgba(229, 102, 102, 0.25);
+            font-family: var(--font);
+            font-size: 13px;
+            line-height: 1.5;
+            display: none;
+        }
+
+        #billerq-chat-toggle:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
         @keyframes blink {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.4; }
@@ -455,6 +474,96 @@
             fill: #fff;
         }
 
+        /* Microphone Button */
+        .mic-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-sm);
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+            flex-shrink: 0;
+            margin-right: 2px;
+        }
+
+        .mic-btn:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .mic-btn.recording {
+            background: var(--error);
+            animation: mic-pulse 1.5s infinite;
+        }
+
+        .mic-btn.recording svg {
+            fill: #fff;
+        }
+
+        @keyframes mic-pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(229, 49, 112, 0.6); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(229, 49, 112, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(229, 49, 112, 0); }
+        }
+
+        .mic-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: var(--text-secondary);
+        }
+
+        /* Typing Status Text */
+        .typing-status {
+            font-family: var(--font);
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-left: 10px;
+            align-self: center;
+        }
+
+        /* Redirect Button CSS */
+        .redirect-container {
+            margin-top: 10px;
+            display: flex;
+            justify-content: flex-start;
+        }
+
+        .redirect-btn {
+            background: linear-gradient(135deg, rgba(108, 92, 231, 0.15), rgba(162, 155, 254, 0.15));
+            border: 1px solid rgba(108, 92, 231, 0.4);
+            border-radius: var(--radius-sm);
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .redirect-btn:hover {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            border-color: var(--primary);
+            box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .redirect-link {
+            color: var(--primary-light);
+            text-decoration: none;
+            font-family: var(--font);
+            font-size: 13px;
+            font-weight: 600;
+            display: block;
+            width: 100%;
+            transition: var(--transition);
+        }
+
+        .redirect-btn:hover .redirect-link {
+            color: #fff;
+        }
+
         /* ============================================================
            Responsive
            ============================================================ */
@@ -503,6 +612,10 @@
             </div>
         </div>
 
+        <div class="auth-warning" id="authWarning">
+            Sign in through the main BillerQ app first. The assistant becomes available only after successful login.
+        </div>
+
         <!-- Messages -->
         <div class="chat-messages" id="chatMessages">
             <div class="welcome-message">
@@ -513,6 +626,8 @@
                 </div>
             </div>
         </div>
+
+
 
         <!-- Quick Actions -->
         <div class="quick-actions" id="quickActions">
@@ -525,6 +640,11 @@
         <!-- Input -->
         <div class="chat-input-area">
             <div class="chat-input-wrapper">
+                <button class="mic-btn" id="micBtn" type="button" aria-label="Voice input">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+                    </svg>
+                </button>
                 <input
                     type="text"
                     id="chatInput"
@@ -547,11 +667,119 @@
         // ============================================================
         // Configuration
         // ============================================================
-        const API_URL = window.BILLERQ_AI_URL || 'http://localhost:8080';
+        // Default to the local backend started by start_dev.bat (port 8080).
+        // If embedding in the parent app set `window.BILLERQ_AI_URL` to the host.
+        const API_URL = window.BILLERQ_AI_URL || 'http://127.0.0.1:8080';
         let sessionId = localStorage.getItem('billerq_session_id') || generateId();
         localStorage.setItem('billerq_session_id', sessionId);
         
         let parentToken = '';
+        let parentApiUrl = '';
+        let parentUserRole = null;
+
+        function getAuthToken() {
+            if (parentToken) {
+                return parentToken;
+            }
+            try {
+                const loginStr = localStorage.getItem('login');
+                if (loginStr) {
+                    const keys = ['6Lf2jgMqAAAAACyRDVxBwemO3J5uxCMKyvzIvNbV', 'your-secret-key'];
+                    for (const key of keys) {
+                        try {
+                            const decrypted = CryptoJS.AES.decrypt(loginStr, key).toString(CryptoJS.enc.Utf8);
+                            if (decrypted) {
+                                const loginData = JSON.parse(decrypted);
+                                if (loginData && loginData.userToken) {
+                                    return loginData.userToken;
+                                }
+                            }
+                        } catch (_) {
+                            // ignore invalid key attempt
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('BillerQ AI: Failed to read token from login in localStorage', e);
+            }
+            return null;
+        }
+
+        function getAuthApiUrl() {
+            if (parentApiUrl) {
+                return parentApiUrl;
+            }
+            try {
+                const profileStr = localStorage.getItem('auth0_profile');
+                if (profileStr) {
+                    const profileData = JSON.parse(profileStr);
+                    if (profileData && profileData.apiUrl) {
+                        return profileData.apiUrl;
+                    }
+                }
+            } catch (e) {
+                // ignore
+            }
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                return 'https://customerapi.billerq.com/api';
+            }
+            try {
+                const ref = document.referrer;
+                if (ref) {
+                    const origin = new URL(ref).origin;
+                    if (origin.includes('admin.billerq.com')) {
+                        return 'https://admin.billerq.com/public/api';
+                    }
+                    if (origin.includes('customer.billerq.com')) {
+                        return 'https://customer.billerq.com/public/api';
+                    }
+                    return origin + '/api';
+                }
+            } catch (e) {
+                // fall through
+            }
+            return null;
+        }
+
+        function getAuthUserRole() {
+            if (parentUserRole !== null) {
+                return parentUserRole;
+            }
+            try {
+                const loginStr = localStorage.getItem('login');
+                if (loginStr) {
+                    const keys = ['6Lf2jgMqAAAAACyRDVxBwemO3J5uxCMKyvzIvNbV', 'your-secret-key'];
+                    for (const key of keys) {
+                        try {
+                            const decrypted = CryptoJS.AES.decrypt(loginStr, key).toString(CryptoJS.enc.Utf8);
+                            if (decrypted) {
+                                const loginData = JSON.parse(decrypted);
+                                if (loginData) {
+                                    const role = loginData.userType !== undefined ? loginData.userType : loginData.userRole;
+                                    if (role !== undefined) return role;
+                                }
+                            }
+                        } catch (_) {
+                            // ignore invalid key attempt
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('BillerQ AI: Failed to read userRole from login in localStorage', e);
+            }
+            return null;
+        }
+
+        function updateAuthUI() {
+            const authWarning = document.getElementById('authWarning');
+            const token = getAuthToken();
+            const allowed = Boolean(token);
+            toggle.disabled = !allowed;
+            if (authWarning) {
+                authWarning.style.display = allowed ? 'none' : 'block';
+            }
+            return allowed;
+        }
 
         // Notify parent we are ready to receive auth data
         if (window.parent !== window) {
@@ -564,7 +792,10 @@
                 const profile = event.data.profile;
                 if (profile && profile.token) {
                     parentToken = profile.token;
-                    console.log('BillerQ AI Widget: Received auth token from parent');
+                    parentApiUrl = profile.apiUrl || '';
+                    parentUserRole = profile.userRole !== undefined ? profile.userRole : null;
+                    console.log('BillerQ AI Widget: Received auth token, API URL and user role from parent');
+                    updateAuthUI();
                 }
             }
         });
@@ -578,14 +809,76 @@
         const chatInput = document.getElementById('chatInput');
         const sendBtn = document.getElementById('sendBtn');
         const quickActions = document.getElementById('quickActions');
+        const micBtn = document.getElementById('micBtn');
 
         let isOpen = false;
         let isLoading = false;
 
         // ============================================================
+        // Voice Input Handling (Speech to Text)
+        // ============================================================
+        if (micBtn) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecognition) {
+                const recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.lang = 'en-IN'; // Optimized for Indian English accent
+                recognition.interimResults = false;
+                recognition.maxAlternatives = 1;
+
+                let isRecording = false;
+
+                micBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (isRecording) {
+                        recognition.stop();
+                    } else {
+                        try {
+                            recognition.start();
+                        } catch (err) {
+                            console.error('Speech recognition failed to start:', err);
+                        }
+                    }
+                });
+
+                recognition.onstart = () => {
+                    isRecording = true;
+                    micBtn.classList.add('recording');
+                    chatInput.placeholder = 'Listening... Speak now';
+                };
+
+                recognition.onend = () => {
+                    isRecording = false;
+                    micBtn.classList.remove('recording');
+                    chatInput.placeholder = 'Ask me anything about BillerQ...';
+                };
+
+                recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                    isRecording = false;
+                    micBtn.classList.remove('recording');
+                    chatInput.placeholder = 'Ask me anything about BillerQ...';
+                };
+
+                recognition.onresult = (event) => {
+                    const resultText = event.results[0][0].transcript;
+                    if (resultText) {
+                        chatInput.value = resultText;
+                        sendBtn.disabled = !chatInput.value.trim() || isLoading;
+                        chatInput.focus();
+                    }
+                };
+            } else {
+                // If browser doesn't support Web Speech API, hide the microphone icon
+                micBtn.style.display = 'none';
+            }
+        }
+
+        // ============================================================
         // Toggle Chat Window
         // ============================================================
         toggle.addEventListener('click', () => {
+            if (toggle.disabled) return;
             isOpen = !isOpen;
             toggle.classList.toggle('open', isOpen);
             chatWindow.classList.toggle('visible', isOpen);
@@ -631,6 +924,8 @@
             }
         });
 
+        
+
         // ============================================================
         // Send Message
         // ============================================================
@@ -650,20 +945,16 @@
             const typingEl = showTypingIndicator();
 
             try {
-                let userToken = parentToken;
-                if (!userToken) {
-                    try {
-                        const loginStr = localStorage.getItem('login');
-                        if (loginStr) {
-                            const decrypted = CryptoJS.AES.decrypt(loginStr, '6Lf2jgMqAAAAACyRDVxBwemO3J5uxCMKyvzIvNbV').toString(CryptoJS.enc.Utf8);
-                            if (decrypted) {
-                                const loginData = JSON.parse(decrypted);
-                                userToken = loginData.userToken;
-                            }
-                        }
-                    } catch (e) {
-                        console.error('BillerQ AI: Failed to read token from login in localStorage', e);
-                    }
+                // Resolve token from parent (host app) or from frontend login stored in localStorage
+                const userTokenLocal = getAuthToken();
+                const userApiUrlLocal = getAuthApiUrl();
+                const userRoleLocal = getAuthUserRole();
+
+                if (!userTokenLocal) {
+                    appendMessage('bot', 'Please sign in to BillerQ in the main app before using the assistant.');
+                    removeTypingIndicator(typingEl);
+                    isLoading = false;
+                    return;
                 }
 
                 const response = await fetch(`${API_URL}/chat`, {
@@ -672,7 +963,9 @@
                     body: JSON.stringify({
                         message: text,
                         session_id: sessionId,
-                        billerq_token: userToken
+                        billerq_token: userTokenLocal,
+                        billerq_api_url: userApiUrlLocal,
+                        billerq_user_role: userRoleLocal
                     }),
                 });
 
@@ -682,7 +975,7 @@
                 removeTypingIndicator(typingEl);
 
                 if (data.response) {
-                    appendMessage('bot', data.response);
+                    appendMessage('bot', data.response, data.metadata);
                     // Update session ID if server provides one
                     if (data.session_id) {
                         sessionId = data.session_id;
@@ -701,10 +994,12 @@
             isLoading = false;
         }
 
+        
+
         // ============================================================
         // Message Rendering
         // ============================================================
-        function appendMessage(sender, text) {
+        function appendMessage(sender, text, metadata) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${sender}`;
 
@@ -714,11 +1009,55 @@
             if (sender === 'bot') {
                 messageDiv.innerHTML = `
                     <div class="bot-avatar">🤖</div>
-                    <div>
+                    <div class="message-content">
                         <div class="message-bubble">${escapeHtml(text)}</div>
                         <div class="message-time">${timeStr}</div>
                     </div>
                 `;
+
+                // If the bot provided redirect metadata, render a button/link
+                if (metadata && metadata.redirect_url) {
+                    try {
+                        const resolved = resolveRedirectUrl(metadata.redirect_url);
+                        const label = metadata.redirect_label || 'Show more details';
+                        const btnContainer = document.createElement('div');
+                        btnContainer.className = 'redirect-container';
+
+                        const link = document.createElement('a');
+                        link.className = 'redirect-link';
+                        link.href = resolved;
+                        link.target = '_blank';
+                        link.rel = 'noopener';
+                        link.textContent = label;
+
+                        const btn = document.createElement('button');
+                        btn.className = 'redirect-btn';
+                        btn.type = 'button';
+                        btn.appendChild(link);
+
+                        // Open in new tab or ask parent to navigate when clicked
+                        btn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            try {
+                                const opened = window.open(resolved, '_blank');
+                                if (!opened && window.parent) {
+                                    window.parent.postMessage({ type: 'billerq-navigate', url: resolved }, '*');
+                                }
+                            } catch (err) {
+                                if (window.parent) {
+                                    window.parent.postMessage({ type: 'billerq-navigate', url: resolved }, '*');
+                                }
+                            }
+                        });
+
+                        // Append the button container under the message bubble
+                        const innerDiv = messageDiv.querySelector('.message-content');
+                        if (innerDiv) innerDiv.appendChild(btnContainer);
+                        btnContainer.appendChild(btn);
+                    } catch (err) {
+                        console.warn('Failed to render redirect button', err);
+                    }
+                }
             } else {
                 messageDiv.innerHTML = `
                     <div>
@@ -730,6 +1069,23 @@
 
             chatMessages.appendChild(messageDiv);
             scrollToBottom();
+        }
+
+        // Resolve a redirect URL to an absolute URL when possible
+        function resolveRedirectUrl(url) {
+            if (!url) return '';
+            if (url.startsWith('http://') || url.startsWith('https://')) return url;
+            if (window.billerqAppUrl) return window.billerqAppUrl.replace(/\/$/, '') + url;
+            try {
+                const ref = document.referrer;
+                if (ref) {
+                    const origin = new URL(ref).origin;
+                    return origin + url;
+                }
+            } catch (e) {
+                // fall through
+            }
+            return url;
         }
 
         // ============================================================
@@ -744,15 +1100,49 @@
                 <div class="typing-dots">
                     <span></span><span></span><span></span>
                 </div>
+                <div class="typing-status" id="typingStatus">Analyzing query...</div>
             `;
             chatMessages.appendChild(typingDiv);
             scrollToBottom();
+
+            // Status steps mapping duration to text
+            let elapsed = 0;
+            const statusEl = typingDiv.querySelector('#typingStatus');
+            const statuses = [
+                { time: 0, text: "Analyzing query..." },
+                { time: 4, text: "Routing to database handler..." },
+                { time: 10, text: "Formulating database request..." },
+                { time: 18, text: "Connecting to BillerQ database..." },
+                { time: 26, text: "Executing query on BillerQ..." },
+                { time: 36, text: "Retrieving records..." },
+                { time: 44, text: "Formatting results (using local CPU, please wait)..." },
+                { time: 60, text: "Generating summary text..." },
+                { time: 80, text: "Almost done (compiling final response)..." },
+                { time: 100, text: "Still working, please wait..." }
+            ];
+
+            const intervalId = setInterval(() => {
+                elapsed += 1;
+                const currentStatus = statuses.reduce((prev, curr) => {
+                    return (elapsed >= curr.time) ? curr : prev;
+                }, statuses[0]);
+                if (statusEl) {
+                    statusEl.textContent = currentStatus.text;
+                }
+            }, 1000);
+
+            typingDiv.dataset.intervalId = intervalId;
             return typingDiv;
         }
 
         function removeTypingIndicator(el) {
-            if (el && el.parentNode) {
-                el.parentNode.removeChild(el);
+            if (el) {
+                if (el.dataset.intervalId) {
+                    clearInterval(parseInt(el.dataset.intervalId));
+                }
+                if (el.parentNode) {
+                    el.parentNode.removeChild(el);
+                }
             }
         }
 
@@ -766,9 +1156,25 @@
         }
 
         function escapeHtml(text) {
+            if (!text) return '';
+            // Basic escape
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML.replace(/\n/g, '<br>');
+            let escaped = div.innerHTML;
+
+            // Bold styling: **text** -> <strong>text</strong>
+            escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+            // Inline code: `code` -> <code>code</code>
+            escaped = escaped.replace(/`(.*?)`/g, '<code style="background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; color: var(--primary-light);">$1</code>');
+
+            // Replace bullet characters/points at the start of a line with styled lists
+            escaped = escaped.replace(/(?:^|<br>)\s*•\s+([^<\n]+)/g, (match, content) => {
+                return `<br><span style="display: inline-flex; align-items: flex-start; gap: 8px; margin-left: 8px;"><span style="color: var(--primary-light);">•</span><span>${content}</span></span>`;
+            });
+
+            // Convert raw newlines to break tags
+            return escaped.replace(/\n/g, '<br>');
         }
 
         function generateId() {

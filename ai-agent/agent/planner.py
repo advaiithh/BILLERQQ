@@ -7,9 +7,15 @@ and returns a structured plan for the Executor to act on.
 
 import os
 import logging
+import re
 from pathlib import Path
+from dotenv import load_dotenv
 
+load_dotenv()
 logger = logging.getLogger(__name__)
+
+FAST_PLANNER = os.getenv("FAST_PLANNER", "true").lower() == "true"
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 
 # Load the planner prompt template
 _PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "planner_prompt.txt"
@@ -75,6 +81,13 @@ class Planner:
         logger.info("Planning for message: '%s'", message[:100])
 
         try:
+            # Fast planner: handle common intents with simple regex and avoid an LLM call.
+            if FAST_PLANNER or DEMO_MODE:
+                fast_plan = self._fast_plan(message)
+                if fast_plan:
+                    logger.info("Fast plan: %s", fast_plan)
+                    return fast_plan
+
             plan = await self.llm.generate_json(
                 prompt=user_prompt,
                 system=system_prompt,
@@ -102,6 +115,33 @@ class Planner:
                 "confidence": 0.0,
                 "error": str(e),
             }
+
+    def _fast_plan(self, message: str) -> dict:
+        """Quick regex-based classification for common queries."""
+        text = message.strip().lower()
+
+        if re.search(r"\b(active customers|how many active customers|active customer)\b", text):
+            return {"intent": "ACTIVE_CUSTOMERS", "entities": {}, "uses_context": False, "confidence": 0.9}
+
+        if re.search(r"\b(package report|show package report|package summary)\b", text):
+            return {"intent": "REPORT", "entities": {"report_type": "package"}, "uses_context": False, "confidence": 0.9}
+
+        if re.search(r"\b(recent payments|show recent payments|payments today)\b", text):
+            return {"intent": "RECENT_PAYMENTS", "entities": {}, "uses_context": False, "confidence": 0.9}
+
+        if re.search(r"\b(overdue|payment due|due payments)\b", text):
+            return {"intent": "OVERDUE", "entities": {}, "uses_context": False, "confidence": 0.9}
+
+        if re.search(r"\b(unpaid customers|unpaid|collect outstanding)\b", text):
+            return {"intent": "UNPAID_CUSTOMERS", "entities": {}, "uses_context": False, "confidence": 0.9}
+
+        if re.search(r"\b(complaints|complaint status|complaint report)\b", text):
+            return {"intent": "COMPLAINTS", "entities": {}, "uses_context": False, "confidence": 0.9}
+
+        if re.search(r"\b(subscription|subscriptions|renewal)\b", text):
+            return {"intent": "SUBSCRIPTION", "entities": {}, "uses_context": False, "confidence": 0.8}
+
+        return None
 
     def _build_prompt(self, message: str, context: dict = None) -> str:
         """Build the user prompt, including conversation context if available."""

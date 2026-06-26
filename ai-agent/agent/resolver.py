@@ -48,6 +48,47 @@ class Resolver:
 
         logger.info("Resolving customer: '%s' (cleaned: '%s')", name, cleaned_name)
 
+        import os
+        demo_mode = os.getenv("DEMO_MODE", "false").lower() == "true"
+        if demo_mode:
+            mock_customers = [
+                {"id": 1, "name": "John Doe", "area_name": "Mumbai", "mobile": "1234567890"},
+                {"id": 2, "name": "Jane Smith", "area_name": "Delhi", "mobile": "9876543210"},
+                {"id": 5, "name": "Bob Wilson", "area_name": "New York", "mobile": "5551234"},
+                {"id": 6, "name": "Alice Johnson", "area_name": "London", "mobile": "5555678"},
+                {"id": 44350, "name": "Joy P", "area_name": "DEVARGATHA", "mobile": "9876543210"}
+            ]
+            name_lower = cleaned_name.lower().strip()
+            matches = []
+            for c in mock_customers:
+                if (name_lower in c["name"].lower() or 
+                    name_lower in str(c["id"]) or 
+                    name_lower in c["mobile"]):
+                    matches.append(c)
+            
+            if not matches:
+                return {
+                    "found": False,
+                    "error": f"No customer found matching '{name}'.",
+                }
+            if len(matches) == 1:
+                return self._build_found_result(matches[0])
+            
+            candidates = [
+                {
+                    "id": c["id"],
+                    "name": c["name"],
+                    "area": c["area_name"],
+                    "mobile": c["mobile"]
+                }
+                for c in matches
+            ]
+            return {
+                "found": False,
+                "error": f"Multiple customers found matching '{name}'. Please be more specific.",
+                "candidates": candidates
+            }
+
         try:
             response = await search_customer(cleaned_name)
         except Exception as e:

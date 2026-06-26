@@ -47,6 +47,7 @@ class BillerQClient:
             self.industry_id = int(os.getenv("BILLERQ_INDUSTRY_ID", "1"))
         except ValueError:
             self.industry_id = 1
+        self.auto_login = os.getenv("BILLERQ_AUTO_LOGIN", "false").lower() == "true"
         self.timeout = 30.0
         self.max_retries = 3
         self._client: Optional[httpx.AsyncClient] = None
@@ -55,6 +56,8 @@ class BillerQClient:
         self._login_lock = asyncio.Lock()
         # Set by the executor to override the token for a single request batch
         self._request_token_override: Optional[str] = None
+        self._request_user_role_override: Optional[int] = None
+        self._admin_base_url: Optional[str] = None
 
     # ------------------------------------------------------------------
     # Token Management
@@ -64,6 +67,11 @@ class BillerQClient:
         """Ensure we have a valid bearer token, logging in if needed."""
         if self._token:
             return
+        if not self.auto_login:
+            raise RuntimeError(
+                "Auto login is disabled. Provide a BillerQ session token "
+                "via the frontend session or call /login with valid credentials."
+            )
         await self._login()
 
     async def _login(self):
@@ -83,7 +91,8 @@ class BillerQClient:
                     "Set BILLERQ_LOGIN_EMAIL and BILLERQ_LOGIN_PASSWORD in .env"
                 )
 
-            login_url = f"{self.base_url}/login"
+            base_api_url = os.getenv("BILLERQ_API_BASE", "https://admin.billerq.com/public/api").rstrip("/")
+            login_url = f"{base_api_url}/login"
             logger.info("Logging in to BillerQ API at %s (industry_id: %d) ...", login_url, self.industry_id)
 
             try:
@@ -130,6 +139,7 @@ class BillerQClient:
                     old_base = self.base_url
                     self.base_url = returned_url.rstrip("/")
                     logger.info("Updated base URL from %s to %s", old_base, self.base_url)
+                self._admin_base_url = self.base_url
 
                 # Close existing client so the next request creates one with the new token & base URL
                 await self._close_client()
@@ -149,7 +159,33 @@ class BillerQClient:
                 logger.error("Login failed: %s", str(e))
                 raise RuntimeError(f"BillerQ login failed: {str(e)}") from e
 
+    def set_credentials(self, email: str, password: str) -> None:
+        """Set BillerQ login credentials for manual login."""
+        self.login_email = email.strip()
+        self.login_password = password.strip()
+        self._token = None
+
+
+    async def login(self, email: str, password: str) -> str:
+        """Authenticate with the provided email/password and return the bearer token."""
+        self.set_credentials(email, password)
+        await self._login()
+        return self._token
+    
     def _get_headers(self, override_token: Optional[str] = None) -> dict:
+        """Build request headers with Bearer token.
+
+        Args:
+            override_token: If provided, use this token instead of the agent's own.
+        """
+        token = override_token or self._token
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return headers
         """Build request headers with Bearer token.
 
         Args:
@@ -209,6 +245,7 @@ class BillerQClient:
         params: Optional[dict] = None,
         json_data: Optional[dict] = None,
         override_token: Optional[str] = None,
+        override_user_role: Optional[int] = None,
     ) -> dict:
         """Execute an HTTP request with retry logic and auto-login.
 
@@ -225,13 +262,21 @@ class BillerQClient:
         Raises:
             RuntimeError: If all retry attempts fail.
         """
-        # Ensure we have logged in at least once to resolve the tenant base URL
-        await self._ensure_token()
+        # Only ensure an internal token when no override token is being used.
+        if override_token is None:
+            await self._ensure_token()
 
         # Clean up the endpoint path
         req_endpoint = endpoint
         if not req_endpoint.startswith("/"):
             req_endpoint = f"/{req_endpoint}"
+
+        # Strip /admin prefix for non-admin user roles (role != 1)
+        role = override_user_role if override_user_role is not None else self._request_user_role_override
+        if role is not None and int(role) != 1:
+            if req_endpoint.startswith("/admin/"):
+                req_endpoint = "/" + req_endpoint[7:]
+                logger.info("Non-admin role (%s) detected — stripped /admin prefix: %s", role, req_endpoint)
 
         # Track whether we've already retried after a 401
         retried_after_401 = False
@@ -263,6 +308,20 @@ class BillerQClient:
                     len(response.content),
                 )
 
+                # Handle 401/403 with override token — fall back to internal auto-login token
+                if response.status_code in (401, 403) and override_token and self.auto_login:
+                    logger.warning("Override token returned status %d. Falling back to internal admin auto-login token...", response.status_code)
+                    override_token = None
+                    use_temp_client = False
+                    if self._admin_base_url:
+                        self.base_url = self._admin_base_url
+                    else:
+                        self.base_url = os.getenv("BILLERQ_API_BASE", "https://admin.billerq.com/public/api").rstrip("/")
+                    self._token = None
+                    await self._ensure_token()
+                    req_endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
+                    continue
+
                 # Handle 401 — token expired, re-login and retry once
                 if response.status_code == 401 and not retried_after_401 and not override_token:
                     retried_after_401 = True
@@ -272,10 +331,48 @@ class BillerQClient:
                     # Don't count this as a retry attempt
                     continue
 
+                # Self-healing retry: if an /admin/ endpoint is forbidden/redirected, strip /admin and retry
+                if response.status_code in (403, 302) and req_endpoint.startswith("/admin/"):
+                    req_endpoint = "/" + req_endpoint[7:]
+                    logger.warning("Access denied to admin endpoint (HTTP %d). Retrying with stripped prefix: %s", response.status_code, req_endpoint)
+                    continue
+
                 # Raise for other HTTP errors (4xx, 5xx)
                 response.raise_for_status()
 
-                return response.json()
+                # If redirected to /error or returned HTML, treat as authentication failure if override_token is set
+                if "/error" in str(response.url) or "text/html" in response.headers.get("content-type", ""):
+                    if override_token and self.auto_login:
+                        logger.warning("Request redirected to error or returned HTML. Falling back to internal admin auto-login...")
+                        override_token = None
+                        use_temp_client = False
+                        if self._admin_base_url:
+                            self.base_url = self._admin_base_url
+                        else:
+                            self.base_url = os.getenv("BILLERQ_API_BASE", "https://admin.billerq.com/public/api").rstrip("/")
+                        self._token = None
+                        await self._ensure_token()
+                        req_endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
+                        continue
+                    else:
+                        raise RuntimeError(f"Request redirected to error page or returned HTML: {response.url}")
+
+                try:
+                    return response.json()
+                except Exception as json_err:
+                    if override_token and self.auto_login:
+                        logger.warning("Failed to parse JSON response. Falling back to internal admin auto-login...")
+                        override_token = None
+                        use_temp_client = False
+                        if self._admin_base_url:
+                            self.base_url = self._admin_base_url
+                        else:
+                            self.base_url = os.getenv("BILLERQ_API_BASE", "https://admin.billerq.com/public/api").rstrip("/")
+                        self._token = None
+                        await self._ensure_token()
+                        req_endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
+                        continue
+                    raise RuntimeError(f"Failed to parse JSON response: {str(json_err)}") from json_err
 
             except httpx.HTTPStatusError as e:
                 last_error = e
@@ -283,6 +380,19 @@ class BillerQClient:
                     "API HTTP error %d on attempt %d: %s",
                     e.response.status_code, attempt, str(e),
                 )
+                # Handle 401/403/302/404 with override token — fall back to internal auto-login token
+                if e.response.status_code in (401, 403, 302, 404) and override_token and self.auto_login:
+                    logger.warning("Exception: HTTP %d with override token. Falling back to internal admin auto-login...", e.response.status_code)
+                    override_token = None
+                    use_temp_client = False
+                    if self._admin_base_url:
+                        self.base_url = self._admin_base_url
+                    else:
+                        self.base_url = os.getenv("BILLERQ_API_BASE", "https://admin.billerq.com/public/api").rstrip("/")
+                    self._token = None
+                    await self._ensure_token()
+                    req_endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
+                    continue
                 # Don't retry client errors (4xx) except 429 (rate limit)
                 if 400 <= e.response.status_code < 500 and e.response.status_code != 429:
                     raise RuntimeError(
@@ -324,6 +434,7 @@ class BillerQClient:
         registry_key: str,
         params: Optional[dict] = None,
         override_token: Optional[str] = None,
+        override_user_role: Optional[int] = None,
     ) -> dict:
         """Make a GET request using a registry key.
 
@@ -331,13 +442,15 @@ class BillerQClient:
             registry_key: Logical name from API_REGISTRY (e.g., "show_customer").
             params: Optional query parameters.
             override_token: Optional token to use instead of the agent's own.
+            override_user_role: Optional user role to override.
 
         Returns:
             Parsed JSON response.
         """
         token = override_token or self._request_token_override
+        role = override_user_role or self._request_user_role_override
         endpoint = get_endpoint(registry_key)
-        return await self._request_with_retry("GET", endpoint, params=params, override_token=token)
+        return await self._request_with_retry("GET", endpoint, params=params, override_token=token, override_user_role=role)
 
     async def post(
         self,
@@ -345,6 +458,7 @@ class BillerQClient:
         data: Optional[dict] = None,
         params: Optional[dict] = None,
         override_token: Optional[str] = None,
+        override_user_role: Optional[int] = None,
     ) -> dict:
         """Make a POST request using a registry key.
 
@@ -353,19 +467,22 @@ class BillerQClient:
             data: JSON body to send.
             params: Optional query parameters.
             override_token: Optional token to use instead of the agent's own.
+            override_user_role: Optional user role to override.
 
         Returns:
             Parsed JSON response.
         """
         token = override_token or self._request_token_override
+        role = override_user_role or self._request_user_role_override
         endpoint = get_endpoint(registry_key)
-        return await self._request_with_retry("POST", endpoint, params=params, json_data=data, override_token=token)
+        return await self._request_with_retry("POST", endpoint, params=params, json_data=data, override_token=token, override_user_role=role)
 
     async def get_raw(
         self,
         endpoint_path: str,
         params: Optional[dict] = None,
         override_token: Optional[str] = None,
+        override_user_role: Optional[int] = None,
     ) -> dict:
         """Make a GET request using a raw endpoint path (bypass registry).
 
@@ -375,12 +492,14 @@ class BillerQClient:
             endpoint_path: Full API path (e.g., "/admin/some-endpoint").
             params: Optional query parameters.
             override_token: Optional token to use instead of the agent's own.
+            override_user_role: Optional user role to override.
 
         Returns:
             Parsed JSON response.
         """
         token = override_token or self._request_token_override
-        return await self._request_with_retry("GET", endpoint_path, params=params, override_token=token)
+        role = override_user_role or self._request_user_role_override
+        return await self._request_with_retry("GET", endpoint_path, params=params, override_token=token, override_user_role=role)
 
 
 # Singleton instance — import and use throughout the app
