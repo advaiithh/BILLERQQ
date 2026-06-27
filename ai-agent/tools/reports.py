@@ -89,14 +89,23 @@ async def get_agent_collection_report() -> dict:
     return await api_client.get("agent_collection_report")
 
 
-async def get_income_summary() -> dict:
+async def get_income_summary(month: str | None = None, year: str | None = None) -> dict:
     """Get income summary report.
+
+    Args:
+        month: Optional month name (e.g. "May")
+        year: Optional year (e.g. "2026")
 
     Returns:
         Income summary data.
     """
-    logger.info("Getting income summary report")
-    return await api_client.get("income_summary_report")
+    logger.info("Getting income summary report for month: %s, year: %s", month, year)
+    params = {}
+    if month:
+        params["month"] = month
+    if year:
+        params["year"] = year
+    return await api_client.get("income_summary_report", params=params)
 
 
 async def get_expense_summary() -> dict:
@@ -137,3 +146,13 @@ async def get_stb_status_count() -> dict:
     """
     logger.info("Getting STB status count")
     return await api_client.get("stb_status_count")
+
+
+async def get_stbs() -> dict:
+    """Get all set-top boxes.
+
+    Returns:
+        STB list.
+    """
+    logger.info("Getting all set-top boxes")
+    return await api_client.get("view_stb")

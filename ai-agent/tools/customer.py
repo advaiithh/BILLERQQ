@@ -10,7 +10,7 @@ from api.client import api_client
 logger = logging.getLogger(__name__)
 
 
-async def search_customer(query: str) -> dict:
+async def search_customer(query: str = "") -> dict:
     """Search for customers by name, mobile, or subscriber ID.
 
     Args:
@@ -36,7 +36,7 @@ async def get_customer_profile(customer_id: int) -> dict:
     return await api_client.get("get_customer_profile", params={"customer_id": customer_id})
 
 
-async def get_all_customers(page: int = 1) -> dict:
+async def get_all_customers(page: int = 1, **kwargs) -> dict:
     """Get all customers (paginated).
 
     Args:
@@ -45,8 +45,10 @@ async def get_all_customers(page: int = 1) -> dict:
     Returns:
         List of customers.
     """
-    logger.info("Getting all customers, page %d", page)
-    return await api_client.get("show_customer", params={"page": page})
+    logger.info("Getting all customers, page %d with kwargs: %s", page, kwargs)
+    params = {"page": page}
+    params.update(kwargs)
+    return await api_client.get("show_customer", params=params)
 
 
 async def get_single_customer(customer_id: int) -> dict:
@@ -133,3 +135,13 @@ async def get_customer_stb(customer_id: int) -> dict:
     """
     logger.info("Getting STBs for customer ID: %d", customer_id)
     return await api_client.get("get_single_stb", params={"customer_id": customer_id})
+
+
+async def get_wallets() -> dict:
+    """Get all customer wallets.
+
+    Returns:
+        Wallet list.
+    """
+    logger.info("Getting all wallets")
+    return await api_client.get("show_wallet")

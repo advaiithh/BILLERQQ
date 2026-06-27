@@ -217,6 +217,12 @@ async def chat(request: ChatRequest):
                 session_id, message[:100], request.billerq_api_url, request.billerq_user_role, token_log)
 
     try:
+        with open("c:\\Users\\advai\\Desktop\\BILLERQQ_w1\\debug_auth.log", "a", encoding="utf-8") as f:
+            f.write(f"\n--- Chat Request ---\n")
+            f.write(f"Message: {message}\n")
+            f.write(f"billerq_token: {request.billerq_token}\n")
+            f.write(f"billerq_api_url: {request.billerq_api_url}\n")
+            f.write(f"billerq_user_role: {request.billerq_user_role}\n")
         # Step 1: Load session memory
         memory = memory_manager.get_session(session_id)
 
@@ -267,6 +273,10 @@ async def chat(request: ChatRequest):
 
     except Exception as e:
         logger.exception("Unhandled error in chat pipeline")
+        import traceback
+        with open("c:\\Users\\advai\\Desktop\\BILLERQQ_w1\\debug_auth.log", "a", encoding="utf-8") as f:
+            f.write(f"ERROR: {str(e)}\n")
+            f.write(traceback.format_exc() + "\n")
         return ChatResponse(
             response="I ran into an unexpected issue. Please try again in a moment.",
             session_id=session_id,

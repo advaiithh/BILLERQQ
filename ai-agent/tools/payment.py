@@ -105,17 +105,31 @@ async def get_payment_receipt(payment_id: int) -> dict:
     return await api_client.get("get_payment_receipt", params={"id": payment_id})
 
 
-async def get_invoices(customer_id: int | None = None) -> dict:
+async def get_invoices(customer_id: int | None = None, **kwargs) -> dict:
     """Get all invoices/orders across the system or for a specific customer.
 
     Args:
         customer_id: Optional customer ID to filter by.
+        **kwargs: Extra query parameters for status filtering.
 
     Returns:
         List of invoices/orders.
     """
-    logger.info("Getting invoices, customer_id: %s", customer_id)
+    logger.info("Getting invoices, customer_id: %s, kwargs: %s", customer_id, kwargs)
+    params = {}
+    params.update(kwargs)
     if customer_id:
-        return await api_client.get("show_single_order", params={"customer_id": customer_id})
-    return await api_client.get("show_order")
+        params["customer_id"] = customer_id
+        return await api_client.get("show_single_order", params=params)
+    return await api_client.get("show_order", params=params)
+
+
+async def get_cancelled_invoices() -> dict:
+    """Get all cancelled invoices.
+
+    Returns:
+        Cancelled invoice records.
+    """
+    logger.info("Getting cancelled invoices")
+    return await api_client.get("cancelled_invoice")
 
