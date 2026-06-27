@@ -335,21 +335,21 @@ class BillerQAgent:
                     name_extracted = cust_match2.group(1).strip()
             
             if name_extracted:
-                # Remove trailing possessive 's or trailing single quote
-                if name_extracted.lower().endswith("'s"):
-                    name_extracted = name_extracted[:-2].strip()
-                elif name_extracted.lower().endswith("'"):
-                    name_extracted = name_extracted[:-1].strip()
-
-                # Remove any trailing keywords that might have been greedily captured
+                # 1. Remove any trailing keywords that might have been greedily captured first
                 for kw in ["wallet", "dues", "due", "balance", "stb", "subscription", "payments", "payment", "history", "invoices", "invoice", "bills", "bill", "total", "phone", "number", "mobile", "contact"]:
                     if name_extracted.lower().endswith(" " + kw):
                         name_extracted = name_extracted[:-len(kw)-1].strip()
                     elif name_extracted.lower() == kw:
                         name_extracted = ""
+
+                # 2. Remove trailing possessive 's or trailing single quote (run AFTER trailing keywords are stripped)
+                if name_extracted.lower().endswith("'s"):
+                    name_extracted = name_extracted[:-2].strip()
+                elif name_extracted.lower().endswith("'"):
+                    name_extracted = name_extracted[:-1].strip()
                 
-                # Remove leading keywords
-                for kw in ["show", "give", "view", "total", "what is", "whats", "get"]:
+                # 3. Remove leading keywords
+                for kw in ["show me", "give me", "tell me", "show", "give", "view", "total", "what is", "whats", "get", "me", "find", "search", "lookup"]:
                     if name_extracted.lower().startswith(kw + " "):
                         name_extracted = name_extracted[len(kw)+1:].strip()
             
@@ -1051,6 +1051,18 @@ class BillerQAgent:
                                 f"• Open Invoices: ₹{open_inv}\n"
                                 f"• Overdue Invoices: ₹{overdue}"
                             )
+                        elif any(k in msg_lower for k in ["phone", "number", "mobile", "contact"]):
+                            rule_based_response = f"Customer {resolved_cust_name.title()}'s Mobile Number: {det.get('mobile', 'N/A')}"
+                        elif "address" in msg_lower:
+                            rule_based_response = f"Customer {resolved_cust_name.title()}'s Address: {data.get('address', 'N/A')}"
+                        elif any(k in msg_lower for k in ["subscriber", "sub id", "sub_id"]):
+                            rule_based_response = f"Customer {resolved_cust_name.title()}'s Subscriber ID: {det.get('subscriber_id', 'N/A')}"
+                        elif any(k in msg_lower for k in ["joined", "join date"]):
+                            rule_based_response = f"Customer {resolved_cust_name.title()}'s Join Date: {data.get('join_date', 'N/A')}"
+                        elif "paid" in msg_lower:
+                            rule_based_response = f"Customer {resolved_cust_name.title()}'s Total Paid Amount: ₹{data.get('paid_amount', '0.00')}"
+                        elif any(k in msg_lower for k in ["connection", "connections", "stb"]):
+                            rule_based_response = f"Customer {resolved_cust_name.title()}'s Connections: {data.get('connections', 0)} ({', '.join(det.get('connections', []))})"
                         else:
                             lines = [
                                 f"Customer Profile: {data.get('customer_name', resolved_cust_name).title()}",
