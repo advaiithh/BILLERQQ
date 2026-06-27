@@ -721,6 +721,10 @@
                 // ignore
             }
             if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                const role = getAuthUserRole();
+                if (role === 1 || String(role) === '1') {
+                    return 'https://customer.billerq.com/public/api';
+                }
                 return 'https://customerapi.billerq.com/api';
             }
             try {

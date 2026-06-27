@@ -42,7 +42,11 @@
                                     // Fallback if auth0_profile did not contain apiUrl
                                     if (!apiUrl) {
                                         if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                                            apiUrl = 'https://customerapi.billerq.com/api';
+                                            if (userRole === 1 || String(userRole) === '1') {
+                                                apiUrl = 'https://customer.billerq.com/public/api';
+                                            } else {
+                                                apiUrl = 'https://customerapi.billerq.com/api';
+                                            }
                                         } else if (window.location.hostname.includes('admin.billerq.com')) {
                                             apiUrl = 'https://admin.billerq.com/public/api';
                                         } else if (window.location.hostname.includes('customer.billerq.com')) {
