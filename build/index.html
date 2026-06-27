@@ -2,84 +2,95 @@
     <iframe id="billerq-ai-iframe" src="http://127.0.0.1:8080/widget" style="width: 100%; height: 100%; border: none; background: transparent;"></iframe>
 </div>
 <script>
+    function getAuthDetails() {
+        let token = null;
+        let apiUrl = null;
+        let userRole = null;
+        try {
+            const profileStr = localStorage.getItem('auth0_profile');
+            if (profileStr) {
+                const profileData = JSON.parse(profileStr);
+                if (profileData && profileData.apiUrl) {
+                    apiUrl = profileData.apiUrl;
+                }
+            }
+        } catch(e) {
+            console.error("BillerQ AI integration: Failed to parse auth0_profile:", e);
+        }
+
+        try {
+            const loginStr = localStorage.getItem('login');
+            if (loginStr) {
+                const keys = ['6Lf2jgMqAAAAACyRDVxBwemO3J5uxCMKyvzIvNbV', 'your-secret-key'];
+                for (const key of keys) {
+                    try {
+                        const decrypted = CryptoJS.AES.decrypt(loginStr, key).toString(CryptoJS.enc.Utf8);
+                        if (decrypted) {
+                            const loginData = JSON.parse(decrypted);
+                            if (loginData && loginData.userToken) {
+                                token = loginData.userToken;
+                                userRole = loginData.userType !== undefined ? loginData.userType : 
+                                           (loginData.userRole !== undefined ? loginData.userRole : loginData.role);
+                                
+                                if (!apiUrl) {
+                                    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                                        if (userRole === 1 || String(userRole) === '1') {
+                                            apiUrl = 'https://customer.billerq.com/public/api';
+                                        } else {
+                                            apiUrl = 'https://customerapi.billerq.com/api';
+                                        }
+                                    } else if (window.location.hostname.includes('admin.billerq.com')) {
+                                        apiUrl = 'https://admin.billerq.com/public/api';
+                                    } else if (window.location.hostname.includes('customer.billerq.com')) {
+                                        apiUrl = 'https://customer.billerq.com/public/api';
+                                    } else {
+                                        apiUrl = window.location.origin + '/api';
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    } catch (_) {}
+                }
+            }
+        } catch(e) {
+            console.error("BillerQ AI integration error:", e);
+        }
+        return { token, apiUrl, userRole };
+    }
+
+    let lastTokenValue = null;
+
     window.addEventListener('message', (event) => {
         const iframe = document.getElementById('billerq-ai-iframe');
         const container = document.getElementById('billerq-ai-iframe-container');
         if (!iframe || !container) return;
 
         if (event.data && event.data.type === 'widget-ready') {
-            // Read profile/token from encrypted localStorage 'login'
-            let token = null;
-            let apiUrl = null;
-            let userRole = null;
-            try {
-                // Try reading API URL from auth0_profile first
-                const profileStr = localStorage.getItem('auth0_profile');
-                if (profileStr) {
-                    const profileData = JSON.parse(profileStr);
-                    if (profileData && profileData.apiUrl) {
-                        apiUrl = profileData.apiUrl;
-                    }
-                }
-            } catch(e) {
-                console.error("BillerQ AI integration: Failed to parse auth0_profile:", e);
-            }
-
-            try {
-                const loginStr = localStorage.getItem('login');
-                if (loginStr) {
-                    const keys = ['6Lf2jgMqAAAAACyRDVxBwemO3J5uxCMKyvzIvNbV', 'your-secret-key'];
-                    for (const key of keys) {
-                        try {
-                            const decrypted = CryptoJS.AES.decrypt(loginStr, key).toString(CryptoJS.enc.Utf8);
-                            if (decrypted) {
-                                const loginData = JSON.parse(decrypted);
-                                if (loginData && loginData.userToken) {
-                                    token = loginData.userToken;
-                                    userRole = loginData.userType !== undefined ? loginData.userType : 
-                                               (loginData.userRole !== undefined ? loginData.userRole : loginData.role);
-                                    
-                                    // Fallback if auth0_profile did not contain apiUrl
-                                    if (!apiUrl) {
-                                        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                                            if (userRole === 1 || String(userRole) === '1') {
-                                                apiUrl = 'https://customer.billerq.com/public/api';
-                                            } else {
-                                                apiUrl = 'https://customerapi.billerq.com/api';
-                                            }
-                                        } else if (window.location.hostname.includes('admin.billerq.com')) {
-                                            apiUrl = 'https://admin.billerq.com/public/api';
-                                        } else if (window.location.hostname.includes('customer.billerq.com')) {
-                                            apiUrl = 'https://customer.billerq.com/public/api';
-                                        } else {
-                                            apiUrl = window.location.origin + '/api';
-                                        }
-                                    }
-                                    break;
-                                }
-                            }
-                        } catch (_) {
-                            // ignore invalid key attempt
-                        }
-                    }
-                }
-            } catch(e) {
-                console.error("BillerQ AI integration error:", e);
-            }
-            
-            // Send to iframe
-            iframe.contentWindow.postMessage({ type: 'billerq-auth', profile: { token: token, apiUrl: apiUrl, userRole: userRole } }, '*');
+            const auth = getAuthDetails();
+            lastTokenValue = auth.token;
+            iframe.contentWindow.postMessage({ type: 'billerq-auth', profile: auth }, '*');
         } else if (event.data && event.data.type === 'toggle-chat') {
             if (event.data.open) {
-                // Expanded size to hold the chat widget
                 container.style.width = '450px';
                 container.style.height = '750px';
             } else {
-                // Collapsed size to just show the toggle button
                 container.style.width = '120px';
                 container.style.height = '120px';
             }
         }
     });
+
+    // Periodically poll localStorage login token for dynamic route/state changes without page reload
+    setInterval(() => {
+        const iframe = document.getElementById('billerq-ai-iframe');
+        if (!iframe) return;
+        const auth = getAuthDetails();
+        if (auth.token !== lastTokenValue) {
+            lastTokenValue = auth.token;
+            console.log("BillerQ AI integration: Dynamic token change detected, syncing with widget iframe...");
+            iframe.contentWindow.postMessage({ type: 'billerq-auth', profile: auth }, '*');
+        }
+    }, 1000);
 </script>
 </body></html>

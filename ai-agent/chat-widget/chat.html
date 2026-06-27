@@ -794,11 +794,11 @@
         window.addEventListener('message', (event) => {
             if (event.data && event.data.type === 'billerq-auth') {
                 const profile = event.data.profile;
-                if (profile && profile.token) {
-                    parentToken = profile.token;
+                if (profile) {
+                    parentToken = profile.token || '';
                     parentApiUrl = profile.apiUrl || '';
                     parentUserRole = profile.userRole !== undefined ? profile.userRole : null;
-                    console.log('BillerQ AI Widget: Received auth token, API URL and user role from parent');
+                    console.log('BillerQ AI Widget: Updated session details from parent');
                     updateAuthUI();
                 }
             }

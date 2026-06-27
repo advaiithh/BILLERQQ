@@ -326,24 +326,30 @@ class BillerQAgent:
 
             # 6. Customer name & keyword detection
             name_extracted = None
-            cust_match = re.search(r"\b(?:details|profile|info|about|stb|subscription|payments?|history|invoices?|bills?|wallet|dues?|balance)\s+(?:of|for)\s+([a-zA-Z0-9\s\.\-\u00C0-\u017F]+)", msg_lower)
+            cust_match = re.search(r"\b(?:details|profile|info|about|stb|subscription|payments?|history|invoices?|bills?|wallet|dues?|balance|phone|number|mobile|contact)\s+(?:of|for)\s+([a-zA-Z0-9\s\.\-\'\u00C0-\u017F]+)", msg_lower)
             if cust_match:
                 name_extracted = cust_match.group(1).strip()
             else:
-                cust_match2 = re.search(r"\b([a-zA-Z0-9\s\.\-\u00C0-\u017F]+)\s+(?:wallet|dues?|balance|stb|subscription|payments?|history|invoices?|bills?)\b", msg_lower)
+                cust_match2 = re.search(r"\b([a-zA-Z0-9\s\.\-\'\u00C0-\u017F]+)\s+(?:wallet|dues?|balance|stb|subscription|payments?|history|invoices?|bills?|phone|number|mobile|contact)\b", msg_lower)
                 if cust_match2:
                     name_extracted = cust_match2.group(1).strip()
             
             if name_extracted:
+                # Remove trailing possessive 's or trailing single quote
+                if name_extracted.lower().endswith("'s"):
+                    name_extracted = name_extracted[:-2].strip()
+                elif name_extracted.lower().endswith("'"):
+                    name_extracted = name_extracted[:-1].strip()
+
                 # Remove any trailing keywords that might have been greedily captured
-                for kw in ["wallet", "dues", "due", "balance", "stb", "subscription", "payments", "payment", "history", "invoices", "invoice", "bills", "bill", "total"]:
+                for kw in ["wallet", "dues", "due", "balance", "stb", "subscription", "payments", "payment", "history", "invoices", "invoice", "bills", "bill", "total", "phone", "number", "mobile", "contact"]:
                     if name_extracted.lower().endswith(" " + kw):
                         name_extracted = name_extracted[:-len(kw)-1].strip()
                     elif name_extracted.lower() == kw:
                         name_extracted = ""
                 
                 # Remove leading keywords
-                for kw in ["show", "give", "view", "total"]:
+                for kw in ["show", "give", "view", "total", "what is", "whats", "get"]:
                     if name_extracted.lower().startswith(kw + " "):
                         name_extracted = name_extracted[len(kw)+1:].strip()
             
@@ -355,7 +361,8 @@ class BillerQAgent:
                     "agent", "online", "cancelled", "canceled", "pending", "deleted", "archived", "highest", "most",
                     "last", "previous", "available", "show", "list", "view", "count", "status", "report", "stb",
                     "problem", "package", "area", "bill", "bills", "order", "orders", "subscription", "subscriptions",
-                    "detail", "details", "profile", "info", "about", "history", "wallet", "dues", "due", "balance", "who", "has", "have"
+                    "detail", "details", "profile", "info", "about", "history", "wallet", "dues", "due", "balance", "who", "has", "have",
+                    "phone", "number", "mobile", "contact"
                 }
                 if any(w in blacklist_words for w in name_words):
                     name_extracted = None
@@ -1086,22 +1093,29 @@ class BillerQAgent:
                             lines.append(f"• Package: {pkg} ({status.upper()})\n  STB: {stb} | Plan Start: {start} | Recurring/End Date: {end}\n  Latest Invoice: {inv}")
                         rule_based_response = "\n".join(lines)
 
-                # 11. search_customer
-                elif tool_name == "search_customer":
-                    data = tool_result.get("data", [])
+                # 11. search_customer or get_all_customers
+                elif tool_name in ("search_customer", "get_all_customers"):
+                    raw_data = tool_result.get("data", []) if isinstance(tool_result, dict) else []
+                    if isinstance(raw_data, dict):
+                        data = raw_data.get("data", [])
+                        total_count = raw_data.get("total", len(data))
+                    else:
+                        data = raw_data
+                        total_count = len(data)
+                        
                     if isinstance(data, list):
                         if not data:
-                            rule_based_response = "No customers found matching your search query."
+                            rule_based_response = "No customers found in the system." if tool_name == "get_all_customers" else "No customers found matching your search query."
                         else:
-                            lines = [f"Found {len(data)} matching customers:"]
+                            lines = [f"Found {total_count} customers in total:" if tool_name == "get_all_customers" else f"Found {len(data)} matching customers:"]
                             for item in data[:5]:
-                                name = item.get("customer_name") or "Unknown"
+                                name = item.get("name") or item.get("customer_name") or "Unknown"
                                 sub_id = item.get("subscriber_id") or "N/A"
-                                stbs = [s.get("stb_no") for s in item.get("stb", []) if s.get("stb_no")]
-                                lines.append(f"• Name: {name} (Sub ID: {sub_id})")
-                                if stbs:
-                                    lines.append(f"  STB No: {', '.join(stbs)}")
-                            if len(data) > 5:
+                                status = item.get("status") or "N/A"
+                                mobile = item.get("mobile") or "N/A"
+                                area = item.get("area_name") or item.get("area") or "N/A"
+                                lines.append(f"• {name} (Sub ID: {sub_id}) — {status.upper()} | Mobile: {mobile} | Area: {area}")
+                            if total_count > 5 or len(data) > 5:
                                 lines.append("\nFor the remaining, click the link below.")
                             rule_based_response = "\n".join(lines)
 
@@ -2107,6 +2121,27 @@ class BillerQAgent:
                 valid_args = {k: v for k, v in casted_args.items() if k in sig.parameters}
             else:
                 valid_args = casted_args
+
+            # Check and supply fallback values for missing required positional parameters
+            for name_param, param in sig.parameters.items():
+                if param.default == inspect.Parameter.empty and param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD):
+                    if name_param not in valid_args:
+                        if name_param == "query":
+                            valid_args["query"] = ""
+                        elif name_param in ("customer_id", "subscription_id", "payment_id", "invoice_id"):
+                            valid_args[name_param] = None
+                        elif name_param == "area_name":
+                            valid_args["area_name"] = ""
+                        else:
+                            valid_args[name_param] = ""
+
+            # If search_customer has an empty query, redirect to get_all_customers
+            if name == "search_customer" and (not valid_args.get("query")):
+                logger.info("Empty search query. Redirecting search_customer to get_all_customers.")
+                func = TOOL_MAP["get_all_customers"]
+                sig = inspect.signature(func)
+                valid_args = {"page": 1}
+                name = "get_all_customers"
 
             logger.info("Calling function %s with arguments: %s (original: %s)", name, valid_args, casted_args)
             result = await func(**valid_args)
