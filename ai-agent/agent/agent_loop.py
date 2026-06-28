@@ -963,6 +963,10 @@ class BillerQAgent:
                             bal = item.get("order_balance") or "0.00"
                             area = item.get("area_name") or "N/A"
                             lines.append(f"• **{cname.strip()}** (Sub ID: **{sub_id}**)\n  - **Dues:** **₹{bal}**\n  - **Area:** {area}")
+                        
+                        lines.append("\n📊 **Dues Metrics Summary:**")
+                        lines.append(f"- **Unpaid Customers Listed:** {min(5, total_count)} 🔴")
+                        lines.append(f"- **Total Outstanding Due:** **₹{format_curr(total_due)}**")
                         if total_count > 5:
                             lines.append("\nFor the remaining, click the link below.")
                         rule_based_response = "\n".join(lines)
@@ -994,6 +998,17 @@ class BillerQAgent:
                             method = item.get("payment_method") or item.get("method") or "N/A"
                             inv = item.get("invoice_no") or "N/A"
                             lines.append(f"• **{cname}** (Sub ID: **{sub_id}**)\n  - **Invoice:** {inv}\n  - **Amount:** **₹{amount}**\n  - **Method:** **{method}**\n  - **Date:** **{date}**")
+                        
+                        # Sum total amount of recent payments
+                        total_sum = 0.0
+                        for item in items:
+                            try:
+                                total_sum += float(str(item.get("amount") or item.get("paid_amount") or 0).replace(",", "").strip())
+                            except Exception:
+                                pass
+                        lines.append("\n📊 **Payments Metrics Summary:**")
+                        lines.append(f"- **Total Collected Amount:** **₹{format_curr(total_sum)}** 🟢")
+                        lines.append(f"- **Total Transactions:** {total}")
                         if total > 5:
                             lines.append("\nFor the remaining, click the link below.")
                         rule_based_response = "\n".join(lines)
@@ -1042,6 +1057,10 @@ class BillerQAgent:
                                     area = c.get("area_name") or c.get("billing_area") or c.get("area") or "N/A"
                                     balance = c.get("dues") or c.get("balance") or c.get("unpaid_amount") or 0
                                     lines.append(f"• **{cname.strip()}**\n  - **Unpaid Balance:** **₹{format_curr(balance)}**\n  - **Area:** {area}")
+                                
+                                lines.append("\n📊 **Unpaid Metrics Summary:**")
+                                lines.append(f"- **Unpaid Customers Listed:** {min(5, total_count)} 🔴")
+                                lines.append(f"- **Total Outstanding Balance:** **₹{format_curr(total_amount)}**")
                                 if len(customers) > 5:
                                     lines.append("\nFor the remaining, click the link below.")
                                 rule_based_response = "\n".join(lines)
@@ -1258,6 +1277,18 @@ class BillerQAgent:
                             date = item.get("invoice_date") or item.get("created_date") or "N/A"
                             status = item.get("payment_status") or item.get("order_status") or "N/A"
                             lines.append(f"• **Invoice #{pref}{inv_no}** — **{cname}** (Sub ID: **{sub_id}**)\n  - **Amount:** {amount}\n  - **Status:** {status.upper()}\n  - **Date:** {date}")
+                        # Count statuses in items
+                        paid_cnt = sum(1 for x in items if str(x.get("payment_status") or x.get("order_status", "")).lower() == "paid")
+                        unpaid_cnt = sum(1 for x in items if str(x.get("payment_status") or x.get("order_status", "")).lower() in ("unpaid", "pending"))
+                        overdue_cnt = sum(1 for x in items if str(x.get("payment_status") or x.get("order_status", "")).lower() == "overdue")
+                        
+                        lines.append("\n📊 **Invoices Metrics Summary:**")
+                        lines.append(f"- **Paid Invoices:** {paid_cnt} 🟢")
+                        lines.append(f"- **Unpaid Invoices:** {unpaid_cnt} 🔴")
+                        if overdue_cnt > 0:
+                            lines.append(f"- **Overdue Invoices:** {overdue_cnt} ⚠️")
+                        lines.append(f"- **Total Listed:** {len(items)}")
+                        
                         if total > 5 or len(items) > 5:
                             lines.append("\nFor the remaining, click the link below.")
                         rule_based_response = "\n".join(lines)

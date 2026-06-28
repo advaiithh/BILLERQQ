@@ -6,12 +6,16 @@
         let token = null;
         let apiUrl = null;
         let userRole = null;
+        let userName = null;
         try {
             const profileStr = localStorage.getItem('auth0_profile');
             if (profileStr) {
                 const profileData = JSON.parse(profileStr);
-                if (profileData && profileData.apiUrl) {
-                    apiUrl = profileData.apiUrl;
+                if (profileData) {
+                    if (profileData.apiUrl) apiUrl = profileData.apiUrl;
+                    if (profileData.name || profileData.nickname) {
+                        userName = profileData.name || profileData.nickname;
+                    }
                 }
             }
         } catch(e) {
@@ -29,6 +33,7 @@
                             const loginData = JSON.parse(decrypted);
                             if (loginData && loginData.userToken) {
                                 token = loginData.userToken;
+                                userName = loginData.userName || loginData.name || loginData.username || userName;
                                 userRole = loginData.userType !== undefined ? loginData.userType : 
                                            (loginData.userRole !== undefined ? loginData.userRole : loginData.role);
                                 
@@ -56,7 +61,7 @@
         } catch(e) {
             console.error("BillerQ AI integration error:", e);
         }
-        return { token, apiUrl, userRole };
+        return { token, apiUrl, userRole, userName };
     }
 
     let lastTokenValue = null;
