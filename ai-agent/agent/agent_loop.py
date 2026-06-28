@@ -326,31 +326,42 @@ class BillerQAgent:
 
             # 6. Customer name & keyword detection
             name_extracted = None
-            cust_match = re.search(r"\b(?:details|profile|info|about|stb|subscription|payments?|history|invoices?|bills?|wallet|dues?|balance|phone|number|mobile|contact|subscriber|sub id|customer id|place|area|location|address|joined|join date|status)\s+(?:of|for)\s+([a-zA-Z0-9\s\.\-\'\u00C0-\u017F]+)", msg_lower)
-            if cust_match:
-                name_extracted = cust_match.group(1).strip()
-            else:
-                cust_match2 = re.search(r"\b([a-zA-Z0-9\s\.\-\'\u00C0-\u017F]+)\s+(?:wallet|dues?|balance|stb|subscription|payments?|history|invoices?|bills?|phone|number|mobile|contact|subscriber|sub id|customer id|place|area|location|address)\b", msg_lower)
-                if cust_match2:
-                    name_extracted = cust_match2.group(1).strip()
+            blacklist_words = {
+                "customer", "customers", "my", "account", "this", "month", "today", "yesterday", "recent",
+                "payments", "unpaid", "invoice", "invoices", "total", "overall", "all", "active", "inactive",
+                "agent", "online", "cancelled", "canceled", "pending", "deleted", "archived", "highest", "most",
+                "last", "previous", "available", "show", "list", "view", "count", "status", "report", "stb",
+                "problem", "package", "area", "bill", "bills", "order", "orders", "subscription", "subscriptions",
+                "detail", "details", "profile", "info", "about", "history", "wallet", "dues", "due", "balance", "who", "has", "have",
+                "phone", "number", "mobile", "contact", "id", "place", "location", "and"
+            }
+            
+            if "'s" in msg_lower:
+                parts = msg_lower.split("'s", 1)
+                candidate = parts[0].strip()
+                for kw in ["show me", "give me", "tell me", "show", "give", "view", "total", "what is", "whats", "get", "me", "find", "search", "lookup"]:
+                    if candidate.lower().startswith(kw + " "):
+                        candidate = candidate[len(kw)+1:].strip()
+                candidate_words = candidate.split()
+                if candidate and not any(w in blacklist_words for w in candidate_words):
+                    name_extracted = candidate
+
+            if not name_extracted:
+                cust_match = re.search(r"\b(?:details|profile|info|about|stb|subscription|payments?|history|invoices?|bills?|wallet|dues?|balance|phone|number|mobile|contact)\s+(?:of|for)\s+([a-zA-Z0-9\s\.\-\'\u00C0-\u017F]+)", msg_lower)
+                if cust_match:
+                    name_extracted = cust_match.group(1).strip()
+                else:
+                    cust_match2 = re.search(r"\b([a-zA-Z0-9\s\.\-\'\u00C0-\u017F]+)\s+(?:wallet|dues?|balance|stb|subscription|payments?|history|invoices?|bills?|phone|number|mobile|contact)\b", msg_lower)
+                    if cust_match2:
+                        name_extracted = cust_match2.group(1).strip()
             
             if name_extracted:
                 # 1. Remove any trailing keywords that might have been greedily captured first
-                strip_keywords = ["wallet", "dues", "due", "balance", "stb", "subscription", "payments", "payment", "history", "invoices", "invoice", "bills", "bill", "total", "phone", "number", "mobile", "contact", "subscriber", "sub id", "customer id", "customer", "place", "area", "location", "address"]
-                changed = True
-                while changed:
-                    changed = False
-                    for kw in strip_keywords:
-                        if name_extracted.lower().endswith(" " + kw):
-                            name_extracted = name_extracted[:-len(kw)-1].strip()
-                            changed = True
-                        elif name_extracted.lower() == kw:
-                            name_extracted = ""
-                            changed = True
-                    # Also strip trailing 'and' left over from compound queries like "phone number and customer id"
-                    if name_extracted.lower().endswith(" and"):
-                        name_extracted = name_extracted[:-4].strip()
-                        changed = True
+                for kw in ["wallet", "dues", "due", "balance", "stb", "subscription", "payments", "payment", "history", "invoices", "invoice", "bills", "bill", "total", "phone", "number", "mobile", "contact"]:
+                    if name_extracted.lower().endswith(" " + kw):
+                        name_extracted = name_extracted[:-len(kw)-1].strip()
+                    elif name_extracted.lower() == kw:
+                        name_extracted = ""
 
                 # 2. Remove trailing possessive 's or trailing single quote (run AFTER trailing keywords are stripped)
                 if name_extracted.lower().endswith("'s"):
@@ -365,17 +376,16 @@ class BillerQAgent:
             
             if name_extracted:
                 name_words = name_extracted.lower().split()
-                blacklist_words = {
-                    "customer", "customers", "my", "account", "this", "month", "today", "yesterday", "recent",
-                    "payments", "unpaid", "invoice", "invoices", "total", "overall", "all", "active", "inactive",
-                    "agent", "online", "cancelled", "canceled", "pending", "deleted", "archived", "highest", "most",
-                    "last", "previous", "available", "show", "list", "view", "count", "status", "report", "stb",
-                    "problem", "package", "area", "bill", "bills", "order", "orders", "subscription", "subscriptions",
-                    "detail", "details", "profile", "info", "about", "history", "wallet", "dues", "due", "balance", "who", "has", "have",
-                    "phone", "number", "mobile", "contact"
-                }
                 if any(w in blacklist_words for w in name_words):
                     name_extracted = None
+
+            if not name_extracted and context and context.get("last_customer_name"):
+                # If they are asking about customer attributes without specifying a name, fallback to context customer name
+                attribute_kws = ["phone", "number", "mobile", "contact", "address", "subscriber", "sub id", "sub_id", "joined", "join date", "paid", "wallet", "dues", "due", "balance", "id", "customer id", "subscriber id", "place", "area", "location"]
+                if any(k in msg_lower for k in attribute_kws):
+                    # Make sure it's not a generic query like "highest dues" or "who has dues" or total collection
+                    if not any(k in msg_lower for k in ["highest", "most", "unpaid list", "active list", "inactive list", "total"]):
+                        name_extracted = context.get("last_customer_name")
 
             if agent_col_match:
                 agent_name = agent_col_match.group(1).strip()
@@ -422,7 +432,7 @@ class BillerQAgent:
                     tool = "get_payment_history"
                 elif "stb" in msg_lower:
                     tool = "get_customer_stb"
-                elif "sub" in msg_lower:
+                elif "sub" in msg_lower and not any(k in msg_lower for k in ["subscriber id", "subscriber_id", "sub id", "sub_id"]):
                     tool = "get_subscription"
                 elif "invoice" in msg_lower or "bill" in msg_lower:
                     tool = "get_invoices"
@@ -534,6 +544,10 @@ class BillerQAgent:
             tool_name = router_result.get("tool", "none")
             tool_args = router_result.get("arguments", {})
             customer_name_query = router_result.get("customer_name")
+            if customer_name_query:
+                q_words = str(customer_name_query).lower().split()
+                if q_words and all(w in blacklist_words for w in q_words):
+                    customer_name_query = None
             
             # Enforce parameters for specific queries (e.g. pending/paid invoices, active/inactive customers, etc.)
             if tool_name == "get_invoices":
@@ -1055,39 +1069,29 @@ class BillerQAgent:
                         open_inv = data.get('open_invoice_amount', '0.00')
                         overdue = data.get('overdue_invoice_amount', '0.00')
                         
-                        # Multi-field response builder: collect ALL matching fields
-                        cust_title = resolved_cust_name.title()
-                        requested_fields = []
-
+                        requested_details = []
                         if "wallet" in msg_lower:
-                            requested_fields.append(f"• Wallet Balance: ₹{wallet_val}")
-                        if "dues" in msg_lower or ("balance" in msg_lower and "wallet" not in msg_lower):
-                            requested_fields.append(f"• Open Invoices: ₹{open_inv}")
-                            requested_fields.append(f"• Overdue Invoices: ₹{overdue}")
-                        if any(k in msg_lower for k in ["phone", "mobile", "contact"]) or ("number" in msg_lower and "subscriber" not in msg_lower):
-                            requested_fields.append(f"• Mobile Number: {det.get('mobile', 'N/A')}")
-                        if any(k in msg_lower for k in ["place", "location"]) or ("area" in msg_lower and "input" not in msg_lower):
-                            requested_fields.append(f"• Area/Place: {data.get('area', 'N/A')}")
+                            requested_details.append(f"• Wallet Balance: **₹{wallet_val}**")
+                        if "dues" in msg_lower or "balance" in msg_lower:
+                            requested_details.append(f"• Open Invoices: **₹{open_inv}**\n• Overdue Invoices: **₹{overdue}**")
+                        if any(k in msg_lower for k in ["phone", "number", "mobile", "contact"]):
+                            requested_details.append(f"• Mobile Number: **{det.get('mobile', 'N/A')}**")
+                        if any(k in msg_lower for k in ["place", "area", "location"]):
+                            requested_details.append(f"• Area/Place: **{data.get('area', 'N/A')}**")
                         if "address" in msg_lower:
-                            requested_fields.append(f"• Address: {data.get('address', 'N/A')}")
-                        if any(k in msg_lower for k in ["subscriber", "sub id", "sub_id"]):
-                            requested_fields.append(f"• Subscriber ID: {det.get('subscriber_id', 'N/A')}")
-                        if any(k in msg_lower for k in ["customer id", "cust id"]):
-                            requested_fields.append(f"• Customer ID: {data.get('customer_id', det.get('id', 'N/A'))}")
+                            requested_details.append(f"• Address: **{data.get('address', 'N/A')}**")
+                        if any(k in msg_lower for k in ["subscriber", "sub id", "sub_id", "customer id", "customer_id", "subscriber id"]):
+                            requested_details.append(f"• Subscriber ID: **{det.get('subscriber_id', 'N/A')}**")
                         if any(k in msg_lower for k in ["joined", "join date"]):
-                            requested_fields.append(f"• Join Date: {data.get('join_date', 'N/A')}")
-                        if "paid" in msg_lower and "unpaid" not in msg_lower:
-                            requested_fields.append(f"• Total Paid Amount: ₹{data.get('paid_amount', '0.00')}")
+                            requested_details.append(f"• Join Date: **{data.get('join_date', 'N/A')}**")
+                        if "paid" in msg_lower:
+                            requested_details.append(f"• Total Paid Amount: **₹{data.get('paid_amount', '0.00')}**")
                         if any(k in msg_lower for k in ["connection", "connections", "stb"]):
-                            requested_fields.append(f"• Connections: {data.get('connections', 0)} ({', '.join(det.get('connections', []))})")
-                        if any(k in msg_lower for k in ["status"]):
-                            status_val = "Active" if int(data.get("connections", 0)) > 0 else "Inactive"
-                            requested_fields.append(f"• Status: {status_val}")
-
-                        if requested_fields:
-                            rule_based_response = f"Customer {cust_title}:\n" + "\n".join(requested_fields)
+                            requested_details.append(f"• Connections: **{data.get('connections', 0)}** ({', '.join(det.get('connections', []))})")
+                            
+                        if requested_details:
+                            rule_based_response = f"👤 **Customer Profile details for {resolved_cust_name.title()}:**\n" + "\n".join(requested_details)
                         else:
-                            # No specific field detected — show full profile
                             lines = [
                                 f"Customer Profile: {data.get('customer_name', resolved_cust_name).title()}",
                                 f"• Subscriber ID: {det.get('subscriber_id', 'N/A')}",
