@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import json
 import re
@@ -324,6 +325,24 @@ class BillerQAgent:
             # 5. Latest added customer
             is_latest_cust = any(k in msg_lower for k in ["latest added", "newest", "recently added", "latest customer", "newest customer"])
 
+            # 5b. Customer comparison: "compare X and Y" / "X vs Y" / "difference between X and Y"
+            compare_names = None
+            compare_match = re.search(
+                r"\b(?:compare|vs|versus|difference\s+between)\b\s+(.+?)\s+(?:and|vs|versus)\s+(.+)",
+                msg_lower
+            )
+            if compare_match:
+                c1 = compare_match.group(1).strip()
+                c2 = compare_match.group(2).strip()
+                # Strip trailing noise words from each name
+                for kw in ["profile", "details", "info", "information", "account"]:
+                    for part in [c1, c2]:
+                        pass
+                c1 = re.sub(r"\b(profile|details|info|information|account|customer)\b", "", c1).strip()
+                c2 = re.sub(r"\b(profile|details|info|information|account|customer)\b", "", c2).strip()
+                if c1 and c2 and c1 != c2:
+                    compare_names = (c1, c2)
+
             # 6. Customer name & keyword detection
             name_extracted = None
             blacklist_words = {
@@ -386,6 +405,99 @@ class BillerQAgent:
                     # Make sure it's not a generic query like "highest dues" or "who has dues" or total collection
                     if not any(k in msg_lower for k in ["highest", "most", "unpaid list", "active list", "inactive list", "total"]):
                         name_extracted = context.get("last_customer_name")
+
+            # ---- EARLY RETURN: Customer Comparison ----
+            if compare_names:
+                from agent.resolver import resolver
+                name1, name2 = compare_names
+
+                async def _fetch_profile(name):
+                    try:
+                        res = await resolver.resolve_customer(name)
+                        if res.get("found"):
+                            cid = res["customer_id"]
+                            cname = res["customer_name"]
+                            profile = await self._execute_tool("get_customer_profile", {"customer_id": cid}, billerq_token, billerq_api_url, billerq_user_role)
+                            return cname, cid, profile
+                        elif res.get("candidates"):
+                            # Pick best match (first candidate)
+                            best = res["candidates"][0]
+                            cid = best.get("id") or best.get("customer_id")
+                            cname = best.get("name") or name
+                            if cid:
+                                profile = await self._execute_tool("get_customer_profile", {"customer_id": cid}, billerq_token, billerq_api_url, billerq_user_role)
+                                return cname, cid, profile
+                        return name, None, None
+                    except Exception:
+                        logger.exception("Error fetching profile for %s in comparison", name)
+                        return name, None, None
+
+                (cname1, cid1, prof1), (cname2, cid2, prof2) = await asyncio.gather(
+                    _fetch_profile(name1),
+                    _fetch_profile(name2)
+                )
+
+                def _extract_profile_fields(prof, cname):
+                    """Extract key fields from a customer profile API response."""
+                    if not prof or not isinstance(prof, dict):
+                        return None
+                    data = prof.get("data") or {}
+                    if not isinstance(data, dict):
+                        return None
+                    det = data.get("customer_details") or {}
+
+                    def safe(val, default="N/A"):
+                        return str(val) if val not in (None, "", "null") else default
+
+                    connections = int(data.get("connections", 0) or 0)
+                    status = "Active" if connections > 0 else "Inactive"
+
+                    return {
+                        "name": safe(data.get("customer_name") or cname),
+                        "subscriber_id": safe(det.get("subscriber_id")),
+                        "status": status,
+                        "mobile": safe(det.get("mobile")),
+                        "area": safe(data.get("area")),
+                        "joined": safe(data.get("join_date")),
+                        "total_paid": safe(data.get("paid_amount", "0.00")),
+                        "open_invoices": safe(data.get("open_invoice_amount", "0.00")),
+                        "overdue": safe(data.get("overdue_invoice_amount", "0.00")),
+                        "wallet": safe(data.get("wallet_money", "0.00")),
+                    }
+
+                fields1 = _extract_profile_fields(prof1, cname1)
+                fields2 = _extract_profile_fields(prof2, cname2)
+
+                if not fields1 and not fields2:
+                    return f"I couldn't find profiles for either '{name1}' or '{name2}'. Please verify the names.", {}
+                elif not fields1:
+                    return f"I couldn't find a customer profile for '{name1}'. Please verify the name.", {}
+                elif not fields2:
+                    return f"I couldn't find a customer profile for '{name2}'. Please verify the name.", {}
+
+                f1, f2 = fields1, fields2
+                comparison_lines = [
+                    f"📊 **Customer Comparison: {f1['name']} vs {f2['name']}**",
+                    "",
+                    f"| Detail | {f1['name']} | {f2['name']} |",
+                    f"|---|---|---|",
+                    f"| Subscriber ID | {f1['subscriber_id']} | {f2['subscriber_id']} |",
+                    f"| Status | {f1['status']} | {f2['status']} |",
+                    f"| Mobile | {f1['mobile']} | {f2['mobile']} |",
+                    f"| Area | {f1['area']} | {f2['area']} |",
+                    f"| Joined | {f1['joined']} | {f2['joined']} |",
+                    f"| Total Paid | ₹{f1['total_paid']} | ₹{f2['total_paid']} |",
+                    f"| Open Invoices | ₹{f1['open_invoices']} | ₹{f2['open_invoices']} |",
+                    f"| Overdue | ₹{f1['overdue']} | ₹{f2['overdue']} |",
+                    f"| Wallet Balance | ₹{f1['wallet']} | ₹{f2['wallet']} |",
+                ]
+                comparison_text = "\n".join(comparison_lines)
+                meta = {}
+                if cid1:
+                    meta["customer_id"] = cid1
+                    meta["customer_name"] = cname1
+                logger.info("Bypassing Formatter LLM — using rule-based response: '%s'", comparison_text[:80])
+                return comparison_text, meta
 
             if agent_col_match:
                 agent_name = agent_col_match.group(1).strip()
