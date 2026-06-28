@@ -58,6 +58,16 @@ async def get_pending_subscriptions() -> dict:
     return await api_client.get("get_pending_subscriptions")
 
 
+async def get_recurring_data() -> dict:
+    """Get list of recurring invoice profiles / billing records.
+
+    Returns:
+        Recurring data list.
+    """
+    logger.info("Getting recurring data list")
+    return await api_client.get("get_recurring_data")
+
+
 async def get_subscription_report() -> dict:
     """Get subscription report data.
 

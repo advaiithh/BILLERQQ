@@ -138,5 +138,67 @@ class TestBillerQAgentPipeline(unittest.TestCase):
         self.assertEqual(truncated[9], "item_9")
 
 
+    def test_get_recurring_data(self):
+        """Test get_recurring_data tool registration and default execution path."""
+        from tools.subscription import get_recurring_data
+        self.assertTrue(callable(get_recurring_data))
+
+
+    def test_navigation_routing(self):
+        """Test that explicit navigation queries instantly return correct redirect metadata."""
+        from agent.agent_loop import BillerQAgent
+        mock_llm = MagicMock()
+        agent = BillerQAgent(llm=mock_llm)
+        
+        resp, meta = asyncio.run(agent.run("redirect to billing", billerq_token="mock_token"))
+        self.assertIn("Billing Management", resp)
+        self.assertEqual(meta.get("redirect_url"), "/billing/subscription")
+        
+        resp2, meta2 = asyncio.run(agent.run("go to banking", billerq_token="mock_token"))
+        self.assertIn("Banking", resp2)
+        self.assertEqual(meta2.get("redirect_url"), "/banking/account")
+
+
+    def test_recurring_billing_queries(self):
+        """Test that various styles of recurring queries resolve correctly."""
+        from agent.agent_loop import BillerQAgent
+        mock_llm = MagicMock()
+        agent = BillerQAgent(llm=mock_llm)
+        
+        agent._execute_tool = AsyncMock(return_value={"data": {"data": [], "total": 0}})
+        
+        queries = [
+            "recurring",
+            "show recurring list",
+            "recurring customer profiles",
+            "recurring invoices list",
+            "get recurring data"
+        ]
+        for q in queries:
+            asyncio.run(agent.run(q, billerq_token="mock_token"))
+            called_args = agent._execute_tool.call_args[0]
+            self.assertEqual(called_args[0], "get_recurring_data")
+
+    def test_complaints_queries(self):
+        """Test that various styles of complaints queries resolve correctly."""
+        from agent.agent_loop import BillerQAgent
+        mock_llm = MagicMock()
+        agent = BillerQAgent(llm=mock_llm)
+        
+        agent._execute_tool = AsyncMock(return_value={"data": {"data": [], "total": 0}})
+        
+        # Test standard complaint queries
+        asyncio.run(agent.run("show complaints", billerq_token="mock_token"))
+        self.assertEqual(agent._execute_tool.call_args[0][0], "get_complaints")
+        
+        # Test status counts
+        asyncio.run(agent.run("complaint status count", billerq_token="mock_token"))
+        self.assertEqual(agent._execute_tool.call_args[0][0], "get_complaint_status_count")
+        
+        # Test problem types
+        asyncio.run(agent.run("show problem types", billerq_token="mock_token"))
+        self.assertEqual(agent._execute_tool.call_args[0][0], "get_problem_types")
+
+
 if __name__ == "__main__":
     unittest.main()

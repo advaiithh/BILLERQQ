@@ -220,6 +220,24 @@ async def chat(request: ChatRequest):
         # Step 1: Load session memory
         memory = memory_manager.get_session(session_id)
 
+        # Safety Check for illegal/malicious activities
+        message_lower = message.lower()
+        unsafe_keywords = [
+            "drop table", "drop database", "delete database", "delete table",
+            "hack", "crack password", "bypass admin", "bypass login", 
+            "steal data", "steal customer", "forge invoice", "forge payment",
+            "fake invoice", "fake payment", "illegal activity", "make illegal",
+            "sql injection", "database injection"
+        ]
+        if any(kw in message_lower for kw in unsafe_keywords):
+            response_text = "I cannot perform those actions. Please contact your BillerQ administrator or support for assistance."
+            memory.add_turn(message, response_text)
+            return ChatResponse(
+                response=response_text,
+                session_id=session_id,
+                metadata={"safety_blocked": True}
+            )
+
         # Step 2: Resolve pronouns (his → Joy P's)
         resolved_message = memory.resolve_pronoun(message)
         if resolved_message != message:

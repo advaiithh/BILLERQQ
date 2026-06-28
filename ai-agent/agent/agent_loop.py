@@ -36,6 +36,7 @@ from tools.subscription import (
     get_single_subscription,
     get_subscription_history,
     get_pending_subscriptions,
+    get_recurring_data,
     get_addon,
     get_addon_history,
     get_items,
@@ -163,6 +164,7 @@ TOOL_MAP = {
     "get_providers": get_providers,
     "get_categories": get_categories,
     "get_tax_classes": get_tax_classes,
+    "get_recurring_data": get_recurring_data,
 }
 
 ROUTER_SYSTEM_PROMPT_TEMPLATE = """You are the API Router for BillerQ AI Assistant.
@@ -195,6 +197,7 @@ Today's Date: {current_date}
 21. `get_customer_stb` - To get Set-Top Box (STB) details of a specific customer. (Requires a customer name).
 22. `search_customer` - To search/list customers, or if the intent is a general list/search of customer names.
 23. `get_invoices` - To get all invoices/orders in the system or filter invoices/orders for a specific customer.
+24. `get_recurring_data` - To get a list of recurring billing invoice profiles or recurring customers.
 
 If no tool is needed (e.g. general greeting, chit-chat, simple question that doesn't need database access), select "none".
 
@@ -305,6 +308,46 @@ class BillerQAgent:
             # Step 1: Route/Select Tool
             # -------------------------------------------------------------
             msg_lower = message.lower().strip()
+            
+            # Direct UI navigation routing
+            navigation_mappings = {
+                ("dashboard",): ("/dashboard/default", "Dashboard"),
+                ("lead management", "lead manager", "leads", "enquiries", "enquiry"): ("/lead-manage/lead", "Lead Management"),
+                ("customer management", "customers", "customer list", "customer"): ("/customers/customer", "Customer Management"),
+                ("billing management", "billing", "subscriptions", "recurring", "subscription", "recurring list"): ("/billing/subscription", "Billing Management"),
+                ("services & products", "services", "products", "addons", "addon", "items", "item"): ("/Services/addon", "Services & Products"),
+                ("expenses & income", "expenses", "income", "expense", "vendors", "headers"): ("/expenses-income/expense", "Financial Management > Expenses & Income"),
+                ("banking", "bank", "transactions", "transaction", "accounts"): ("/banking/account", "Financial Management > Banking"),
+                ("reports & analytics", "reports", "report", "analytics", "collection report", "tax report", "wallet report"): ("/report/unpaid-customer", "Reports & Analytics"),
+                ("complaint management", "complaints", "complaint", "problems"): ("/complaints", "Complaint Management"),
+                ("staff management", "staff", "roles", "role"): ("/staff/staff", "Staff Management"),
+                ("system settings", "settings", "tax classes", "providers", "categories"): ("/settings/categories", "System Settings")
+            }
+            
+            # Pure categories that default to redirection on exact match
+            pure_categories = {
+                "dashboard", "lead management", "customer management", "billing management",
+                "services & products", "financial management", "expenses & income", "banking",
+                "reports & analytics", "complaint management", "staff management", "system settings"
+            }
+            
+            is_navigation_request = any(kw in msg_lower for kw in ("redirect", "go to", "open", "navigate", "show me page", "show page", "view page"))
+            
+            exact_match = None
+            for keywords, (path, label) in navigation_mappings.items():
+                is_pure_match = msg_lower in pure_categories and msg_lower in keywords
+                if is_pure_match or (is_navigation_request and any(kw in msg_lower for kw in keywords)):
+                    exact_match = (path, label)
+                    break
+                    
+            if exact_match:
+                path, label = exact_match
+                response_text = f"Sure! I can help you redirect to the **{label}** page. Click the button below to navigate there."
+                return response_text, {
+                    "redirect_url": path,
+                    "redirect_label": f"Go to {label}"
+                }
+            
             fast_result = None
 
             # Fast routing rules
@@ -519,7 +562,9 @@ class BillerQAgent:
                 logger.info("Bypassing Formatter LLM — using rule-based response: '%s'", comparison_text[:80])
                 return comparison_text, meta
 
-            if agent_col_match:
+            if "recurring" in msg_lower:
+                fast_result = {"tool": "get_recurring_data", "arguments": {}, "customer_name": None}
+            elif agent_col_match:
                 agent_name = agent_col_match.group(1).strip()
                 fast_result = {"tool": "get_connection_data", "arguments": {}, "customer_name": agent_name}
             elif any(k in msg_lower for k in ["item list", "items list", "show items", "list items"]):
@@ -609,6 +654,8 @@ class BillerQAgent:
                 fast_result = {"tool": "get_complaint_status_count", "arguments": {}, "customer_name": None}
             elif "complaint" in msg_lower:
                 fast_result = {"tool": "get_complaints", "arguments": {}, "customer_name": None}
+            elif "recurring" in msg_lower:
+                fast_result = {"tool": "get_recurring_data", "arguments": {}, "customer_name": None}
             elif "archived customer" in msg_lower or "archived customers" in msg_lower or "deleted customer" in msg_lower or "deleted customers" in msg_lower:
                 fast_result = {"tool": "get_archived_customers", "arguments": {}, "customer_name": None}
             elif "pending subscription" in msg_lower or "pending subscriptions" in msg_lower or "pending activation" in msg_lower or "pending activations" in msg_lower:
@@ -968,6 +1015,38 @@ class BillerQAgent:
                         lines.append(f"- **Unpaid Customers Listed:** {min(5, total_count)} 🔴")
                         lines.append(f"- **Total Outstanding Due:** **₹{format_curr(total_due)}**")
                         if total_count > 5:
+                            lines.append("\nFor the remaining, click the link below.")
+                        rule_based_response = "\n".join(lines)
+
+                # get_recurring_data
+                elif tool_name == "get_recurring_data":
+                    c_data = tool_result.get("data", {})
+                    items = []
+                    total = 0
+                    if isinstance(c_data, dict):
+                        items = c_data.get("data", [])
+                        total = c_data.get("total", len(items))
+                    elif isinstance(c_data, list):
+                        items = c_data
+                        total = len(items)
+                    
+                    if not items:
+                        rule_based_response = "No recurring invoice profiles found."
+                    else:
+                        lines = [f"📊 **Recurring Invoices List ({total} total):**", ""]
+                        for item in items[:5]:
+                            cust = item.get("customer_name") or item.get("customer") or "Unknown"
+                            sub_id = item.get("subscriber_id") or "N/A"
+                            pkg = item.get("package_name") or "N/A"
+                            start = item.get("start_date") or "N/A"
+                            billing_type = item.get("type") or "Master"
+                            lines.append(f"• **{cust}** (Sub ID: **{sub_id}**)\n  - **Package:** {pkg}\n  - **Type:** {billing_type}\n  - **Start Date:** {start}")
+                        
+                        lines.append("\n📊 **Recurring Metrics Summary:**")
+                        lines.append(f"- **Recurring Profiles Listed:** {min(5, total)}")
+                        lines.append(f"- **Total Recurring Profiles:** {total}")
+                        
+                        if total > 5:
                             lines.append("\nFor the remaining, click the link below.")
                         rule_based_response = "\n".join(lines)
 
@@ -2098,6 +2177,7 @@ class BillerQAgent:
             "get_categories": ("/settings/categories", "View categories"),
             "get_tax_classes": ("/settings/tax-class", "View tax classes"),
             "get_wallets": ("/customers/wallet", "View wallets"),
+            "get_recurring_data": ("/billing/recurring", "View recurring"),
         }
 
         # Dynamic overrides
@@ -2519,6 +2599,14 @@ class BillerQAgent:
 
         func = TOOL_MAP.get(name)
         if not func:
+            from api.registry import API_REGISTRY
+            if name in API_REGISTRY:
+                logger.info("Tool '%s' not found in TOOL_MAP. Executing dynamically via API_REGISTRY.", name)
+                try:
+                    return await api_client.get(name, params=arguments)
+                except Exception as e:
+                    logger.exception("Dynamic GET request failed for key %s", name)
+                    return {"error": f"Dynamic endpoint call failed: {str(e)}"}
             return {"error": f"Tool '{name}' is not supported."}
 
         try:

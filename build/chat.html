@@ -99,6 +99,67 @@
         }
 
         /* ============================================================
+           Drag Handle Grips
+           ============================================================ */
+        .toggle-drag-handle {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2b2b3d;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            width: 28px;
+            height: 16px;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+            z-index: 100000;
+            transition: background 0.2s, color 0.2s;
+        }
+        #billerq-chat-toggle.open .toggle-drag-handle {
+            display: none;
+        }
+        .toggle-drag-handle:hover {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+        .toggle-drag-handle svg {
+            width: 10px;
+            height: 10px;
+            fill: currentColor;
+            transform: rotate(90deg);
+        }
+
+        .header-drag-handle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            cursor: grab;
+            padding: 4px;
+            border-radius: 6px;
+            transition: background 0.2s, color 0.2s;
+            flex-shrink: 0;
+            margin-right: -4px;
+        }
+        .header-drag-handle:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-primary);
+        }
+        .header-drag-handle:active {
+            cursor: grabbing;
+        }
+        .header-drag-handle svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+
+        /* ============================================================
            Chat Window Container
            ============================================================ */
         #billerq-chat-window {
@@ -141,6 +202,20 @@
             align-items: center;
             gap: 14px;
             flex-shrink: 0;
+        }
+
+        .chat-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .header-column-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
         }
 
         .chat-header-avatar {
@@ -641,15 +716,17 @@
             border: 1px solid rgba(162, 155, 254, 0.3);
             color: var(--primary-light);
             font-family: var(--font);
-            font-size: 11.5px;
+            font-size: 10px;
             font-weight: 600;
-            padding: 5px 11px;
-            border-radius: 20px;
+            padding: 4px 8px;
+            border-radius: 12px;
             cursor: pointer;
             text-decoration: none;
             transition: background 0.2s, border-color 0.2s, transform 0.15s;
             white-space: nowrap;
-            margin-left: auto;
+            width: 82px;
+            justify-content: flex-start;
+            box-sizing: border-box;
         }
         .guide-btn:hover {
             background: rgba(162, 155, 254, 0.28);
@@ -657,8 +734,8 @@
             transform: translateY(-1px);
         }
         .guide-btn svg {
-            width: 13px;
-            height: 13px;
+            width: 12px;
+            height: 12px;
             fill: currentColor;
             flex-shrink: 0;
         }
@@ -911,7 +988,7 @@
             text-decoration: none;
             transition: background 0.2s, border-color 0.2s, transform 0.15s;
             white-space: nowrap;
-            margin-left: 8px;
+            margin: 0;
         }
         .clear-btn:hover {
             background: rgba(229, 49, 112, 0.25);
@@ -1021,6 +1098,42 @@
         }
 
         /* ============================================================
+           Reset Position Button
+           ============================================================ */
+        .reset-position-btn {
+            position: absolute;
+            bottom: 84px;
+            left: 50%;
+            transform: translateX(-50%) translateY(10px);
+            background: rgba(108, 92, 231, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #fff;
+            font-family: var(--font);
+            font-size: 11px;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 1000;
+            transition: opacity 0.3s, transform 0.3s, background 0.2s;
+            opacity: 0;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .reset-position-btn.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+            pointer-events: all;
+        }
+        .reset-position-btn:hover {
+            background: var(--primary);
+            transform: translateX(-50%) translateY(-1px);
+        }
+
+        /* ============================================================
            Fast Commands Dropdown Menu
            ============================================================ */
         .cmd-menu-btn {
@@ -1116,11 +1229,177 @@
             font-family: monospace;
             flex-shrink: 0;
         }
+
+        /* ============================================================
+           Contact Button
+           ============================================================ */
+        .contact-btn {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(46, 204, 113, 0.12);
+            border: 1px solid rgba(46, 204, 113, 0.25);
+            color: #2ecc71;
+            font-family: var(--font);
+            font-size: 10px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 12px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s;
+            white-space: nowrap;
+            width: 82px;
+            justify-content: flex-start;
+            box-sizing: border-box;
+        }
+        .contact-btn:hover {
+            background: rgba(46, 204, 113, 0.25);
+            border-color: rgba(46, 204, 113, 0.5);
+            transform: translateY(-1px);
+        }
+        .contact-btn svg {
+            width: 12px;
+            height: 12px;
+            fill: currentColor;
+            flex-shrink: 0;
+        }
+
+        /* ============================================================
+           Contact Overlay
+           ============================================================ */
+        .contact-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 10, 15, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 300;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            padding: 20px;
+        }
+        .contact-overlay.open {
+            opacity: 1;
+            pointer-events: all;
+        }
+        .contact-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            width: 100%;
+            max-width: 320px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            transform: translateY(20px);
+            transition: transform 0.3s ease;
+            overflow: hidden;
+        }
+        .contact-overlay.open .contact-card {
+            transform: translateY(0);
+        }
+        .contact-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, rgba(46, 204, 113, 0.15), rgba(46, 204, 113, 0.05));
+            border-bottom: 1px solid var(--border);
+        }
+        .contact-card-header h3 {
+            margin: 0;
+            font-size: 14.5px;
+            color: #2ecc71;
+            font-family: var(--font);
+            font-weight: 700;
+        }
+        .contact-close-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 16px;
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s;
+        }
+        .contact-close-btn:hover {
+            color: var(--text-primary);
+        }
+        .contact-card-body {
+            padding: 20px;
+        }
+        .contact-intro {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+            line-height: 1.4;
+        }
+        .contact-info-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .contact-info-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            text-decoration: none;
+            color: inherit;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s;
+        }
+        .contact-info-item:hover {
+            background: rgba(46, 204, 113, 0.08);
+            border-color: rgba(46, 204, 113, 0.25);
+            transform: translateX(3px);
+        }
+        .contact-info-icon {
+            font-size: 18px;
+            width: 32px;
+            height: 32px;
+            background: rgba(46, 204, 113, 0.12);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .contact-info-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .contact-info-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .contact-info-val {
+            font-size: 12px;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
     <!-- Toggle Button -->
     <button id="billerq-chat-toggle" aria-label="Open AI Assistant">
+        <div class="toggle-drag-handle" id="toggleDragHandle" title="Hold and drag to move">
+            <svg viewBox="0 0 24 24"><path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+        </div>
         <svg class="icon-chat" viewBox="0 0 24 24">
             <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.2L4 17.2V4h16v12z"/>
             <circle cx="8" cy="10" r="1.2"/>
@@ -1136,22 +1415,33 @@
     <div id="billerq-chat-window">
         <!-- Header -->
         <div class="chat-header">
+            <div class="header-drag-handle" id="headerDragHandle" title="Hold and drag to move chatbot">
+                <svg viewBox="0 0 24 24"><path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+            </div>
             <div class="chat-header-avatar">🤖</div>
             <div class="chat-header-info">
-                <div class="chat-header-title">BillerQ AI Assistant</div>
+                <div class="chat-header-title">BillerQ Copilot</div>
                 <div class="chat-header-status">
                     <span class="status-dot"></span>
                     Online
                 </div>
             </div>
-            <button class="guide-btn" id="guidBtn" title="Open BillerQ Guide">
-                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
-                Guide
-            </button>
-            <button class="clear-btn" id="clearChatBtn" title="Clear Chat History">
-                <svg viewBox="0 0 24 24"><path d="M16 9v10H8V9h8m-1.5-6h-5l-1 1H5v2h14V4h-3.5l-1-1zM18 7H6v12c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7z"/></svg>
-                Clear
-            </button>
+            <div class="chat-header-actions">
+                <button class="clear-btn" id="clearChatBtn" title="Clear Chat History">
+                    <svg viewBox="0 0 24 24"><path d="M16 9v10H8V9h8m-1.5-6h-5l-1 1H5v2h14V4h-3.5l-1-1zM18 7H6v12c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7z"/></svg>
+                    Clear
+                </button>
+                <div class="header-column-actions">
+                    <button class="guide-btn" id="guidBtn" title="Open BillerQ Guide">
+                        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
+                        Guide
+                    </button>
+                    <button class="contact-btn" id="contactBtn" title="Contact Us Details">
+                        <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+                        Contact
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- Guide Panel (overlays chat) -->
@@ -1226,6 +1516,14 @@
                             </div>
                             <span class="guide-topic-arrow">›</span>
                         </div>
+                        <div class="guide-topic-item" data-topic="contact-us">
+                            <div class="guide-topic-icon">📞</div>
+                            <div class="guide-topic-text">
+                                <div class="guide-topic-name">Contact Us</div>
+                                <div class="guide-topic-desc">Get in touch with BillerQ support</div>
+                            </div>
+                            <span class="guide-topic-arrow">›</span>
+                        </div>
                     </div>
                 </div>
                 <!-- Steps View (dynamically populated) -->
@@ -1233,9 +1531,53 @@
             </div>
         </div>
 
+        <!-- Contact Us Overlay Modal -->
+        <div id="contactOverlay" class="contact-overlay">
+            <div class="contact-card">
+                <div class="contact-card-header">
+                    <h3>📞 Need More Help?</h3>
+                    <button class="contact-close-btn" id="contactCloseBtn" title="Close">✕</button>
+                </div>
+                <div class="contact-card-body">
+                    <p class="contact-intro">Feel free to reach out to us. We are happy to assist you!</p>
+                    
+                    <div class="contact-info-list">
+                        <a href="mailto:info@billerq.com" class="contact-info-item">
+                            <span class="contact-info-icon">✉️</span>
+                            <div class="contact-info-text">
+                                <span class="contact-info-label">Email Us</span>
+                                <span class="contact-info-val">info@billerq.com</span>
+                            </div>
+                        </a>
+                        
+                        <a href="tel:+917012733393" class="contact-info-item">
+                            <span class="contact-info-icon">📞</span>
+                            <div class="contact-info-text">
+                                <span class="contact-info-label">Call Us</span>
+                                <span class="contact-info-val">+91 7012733393</span>
+                            </div>
+                        </a>
+                        
+                        <a href="https://billerq.com/contact.php" target="_blank" class="contact-info-item">
+                            <span class="contact-info-icon">🌐</span>
+                            <div class="contact-info-text">
+                                <span class="contact-info-label">Visit Contact Page</span>
+                                <span class="contact-info-val">billerq.com/contact.php</span>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="auth-warning" id="authWarning">
             Sign in through the main BillerQ app first. The assistant becomes available only after successful login.
         </div>
+
+        <!-- Reset Position Button -->
+        <button id="resetPositionBtn" class="reset-position-btn" title="Reset chatbot window position to default">
+            ↩ Reset Position
+        </button>
 
         <!-- Messages -->
         <div class="chat-messages" id="chatMessages">
@@ -1514,6 +1856,10 @@
         const scrollBottomBtn = document.getElementById('scroll-bottom-btn');
         const cmdMenuBtn = document.getElementById('cmdMenuBtn');
         const cmdDropdown = document.getElementById('cmdDropdown');
+        const contactBtn = document.getElementById('contactBtn');
+        const contactOverlay = document.getElementById('contactOverlay');
+        const contactCloseBtn = document.getElementById('contactCloseBtn');
+        const resetPositionBtn = document.getElementById('resetPositionBtn');
 
         let isOpen = false;
         let isLoading = false;
@@ -1702,10 +2048,149 @@
         }
 
         // ============================================================
+        // Repositioning (Drag and Hold) helpers
+        // ============================================================
+        function makeDraggable(el, onDragStart, onDragMove, onDragEnd) {
+            let isDragging = false;
+            let startX = 0;
+            let startY = 0;
+            let moveThreshold = 6;
+            let hasMoved = false;
+
+            el.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                if (e.target.closest('button') || e.target.closest('input')) return;
+                
+                e.stopPropagation();
+                isDragging = true;
+                hasMoved = false;
+                startX = e.clientX;
+                startY = e.clientY;
+                
+                if (onDragStart) onDragStart(e);
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+                e.preventDefault();
+            });
+
+            el.addEventListener('touchstart', (e) => {
+                if (e.target.closest('button') || e.target.closest('input')) return;
+                e.stopPropagation();
+                
+                const touch = e.touches[0];
+                isDragging = true;
+                hasMoved = false;
+                startX = touch.clientX;
+                startY = touch.clientY;
+                
+                if (onDragStart) onDragStart(touch);
+                document.addEventListener('touchmove', onTouchMove, { passive: false });
+                document.addEventListener('touchend', onTouchEnd);
+            });
+
+            function onMouseMove(e) {
+                if (!isDragging) return;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                
+                if (!hasMoved && (Math.abs(dx) > moveThreshold || Math.abs(dy) > moveThreshold)) {
+                    hasMoved = true;
+                }
+                
+                if (hasMoved && onDragMove) {
+                    onDragMove(dx, dy);
+                }
+            }
+
+            function onTouchMove(e) {
+                if (!isDragging) return;
+                const touch = e.touches[0];
+                const dx = touch.clientX - startX;
+                const dy = touch.clientY - startY;
+                
+                if (!hasMoved && (Math.abs(dx) > moveThreshold || Math.abs(dy) > moveThreshold)) {
+                    hasMoved = true;
+                }
+                
+                if (hasMoved) {
+                    e.preventDefault();
+                    if (onDragMove) {
+                        onDragMove(dx, dy);
+                    }
+                }
+            }
+
+            function onMouseUp(e) {
+                if (isDragging) {
+                    isDragging = false;
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                    if (onDragEnd) onDragEnd(hasMoved);
+                }
+            }
+
+            function onTouchEnd(e) {
+                if (isDragging) {
+                    isDragging = false;
+                    document.removeEventListener('touchmove', onTouchMove);
+                    document.removeEventListener('touchend', onTouchEnd);
+                    if (onDragEnd) onDragEnd(hasMoved);
+                }
+            }
+        }
+
+        const toggleDragHandle = document.getElementById('toggleDragHandle');
+        const headerDragHandle = document.getElementById('headerDragHandle');
+
+        if (localStorage.getItem('billerq_widget_moved') === 'true') {
+            if (resetPositionBtn) resetPositionBtn.classList.add('visible');
+        }
+
+        if (toggleDragHandle) {
+            makeDraggable(toggleDragHandle,
+                () => window.parent.postMessage({ type: 'drag-start' }, '*'),
+                (dx, dy) => {
+                    localStorage.setItem('billerq_widget_moved', 'true');
+                    if (resetPositionBtn) resetPositionBtn.classList.add('visible');
+                    window.parent.postMessage({ type: 'drag-move', dx: dx, dy: dy }, '*');
+                },
+                (hasMoved) => {
+                    window.parent.postMessage({ type: 'drag-end' }, '*');
+                    if (hasMoved) {
+                        toggle.setAttribute('data-dragged', 'true');
+                        setTimeout(() => toggle.removeAttribute('data-dragged'), 80);
+                    }
+                }
+            );
+        }
+
+        if (headerDragHandle) {
+            makeDraggable(headerDragHandle,
+                () => window.parent.postMessage({ type: 'drag-start' }, '*'),
+                (dx, dy) => {
+                    localStorage.setItem('billerq_widget_moved', 'true');
+                    if (resetPositionBtn) resetPositionBtn.classList.add('visible');
+                    window.parent.postMessage({ type: 'drag-move', dx: dx, dy: dy }, '*');
+                },
+                () => window.parent.postMessage({ type: 'drag-end' }, '*')
+            );
+        }
+
+        if (resetPositionBtn) {
+            resetPositionBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                localStorage.removeItem('billerq_widget_moved');
+                resetPositionBtn.classList.remove('visible');
+                window.parent.postMessage({ type: 'reset-widget' }, '*');
+            });
+        }
+
+        // ============================================================
         // Toggle Chat Window
         // ============================================================
         toggle.addEventListener('click', () => {
             if (toggle.disabled) return;
+            if (toggle.getAttribute('data-dragged') === 'true') return;
             isOpen = !isOpen;
             toggle.classList.toggle('open', isOpen);
             chatWindow.classList.toggle('visible', isOpen);
@@ -1890,10 +2375,12 @@
                 quickActions.style.display = 'none';
             }
 
-            // Check if user is sending a pure greeting
+            // Check if user is sending a pure greeting or simple conversational phrase
             const cleaned = text.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
-            const greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'hi there', 'hello there'];
-            if (greetings.includes(cleaned)) {
+            const greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'hi there', 'hello there', 'greetings', 'greeting'];
+            const pleasantries = ['thank you', 'thanks', 'great', 'awesome', 'cool', 'perfect', 'ok', 'okay', 'nice', 'help'];
+            
+            if (greetings.includes(cleaned) || pleasantries.includes(cleaned)) {
                 appendMessage('user', text);
                 chatInput.value = '';
                 if (inputClearBtn) inputClearBtn.style.display = 'none';
@@ -1907,7 +2394,19 @@
                     removeTypingIndicator(typingEl);
                     const userName = getAuthUserName();
                     const greetingName = userName ? ` ${userName.trim()}` : '';
-                    appendMessage('bot', `Hello${greetingName}! How can I help you today?`);
+                    
+                    let reply = `Hello${greetingName}! How can I help you today?`;
+                    if (['thanks', 'thank you'].includes(cleaned)) {
+                        reply = `You're very welcome${greetingName}! I'm always happy to assist you. Let me know if there's anything else you need!`;
+                    } else if (['great', 'awesome', 'cool', 'perfect', 'nice'].includes(cleaned)) {
+                        reply = `Awesome! I'm glad I could help${greetingName}. Let me know if you need help with customers, payments, or reports!`;
+                    } else if (['ok', 'okay'].includes(cleaned)) {
+                        reply = `Perfect! Let me know what you would like to look up next${greetingName}.`;
+                    } else if (cleaned === 'help') {
+                        reply = `I'm here to help${greetingName}! You can check the <strong>Guide</strong> at the top for tutorials, or ask me questions like <em>"How many active customers?"</em> or <em>"Who has overdue payments?"</em>.`;
+                    }
+                    
+                    appendMessage('bot', reply);
                     isLoading = false;
                 }, 400);
                 return;
@@ -2398,6 +2897,16 @@
                     { title: 'Filter Customers', detail: 'Ask: <strong>"Show customers with high payment due"</strong> or <strong>"List inactive customers"</strong> to filter and view sorted lists.' },
                     { title: 'Use Voice Input', detail: 'Click the 🎙️ microphone icon to speak your query instead of typing. Speaks clearly and the AI will respond.', tip: '💡 Voice works best in Chrome browser on desktop or Android.' }
                 ]
+            },
+            'contact-us': {
+                icon: '📞',
+                title: 'Contact Us',
+                desc: 'Get in touch with BillerQ support team',
+                steps: [
+                    { title: 'Email Support', detail: 'Email us at <a href="mailto:info@billerq.com" style="color: var(--primary-light); font-weight: bold; text-decoration: underline;">info@billerq.com</a> for any queries, requests, or technical issues.' },
+                    { title: 'Call Support', detail: 'Talk to us directly at <a href="tel:+917012733393" style="color: var(--primary-light); font-weight: bold; text-decoration: underline;">+91 7012733393</a> for immediate help.' },
+                    { title: 'Online Contact Page', detail: 'Visit our contact page on the web: <a href="https://billerq.com/contact.php" target="_blank" style="color: var(--primary-light); font-weight: bold; text-decoration: underline;">billerq.com/contact.php</a>.' }
+                ]
             }
         };
 
@@ -2483,6 +2992,30 @@
             const item = e.target.closest('.guide-topic-item');
             if (item) showSteps(item.getAttribute('data-topic'));
         });
+
+        // ============================================================
+        // Contact Us Overlay Actions
+        // ============================================================
+        if (contactBtn && contactOverlay) {
+            contactBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                contactOverlay.classList.add('open');
+            });
+        }
+
+        if (contactCloseBtn && contactOverlay) {
+            contactCloseBtn.addEventListener('click', () => {
+                contactOverlay.classList.remove('open');
+            });
+        }
+
+        if (contactOverlay) {
+            contactOverlay.addEventListener('click', (e) => {
+                if (e.target === contactOverlay) {
+                    contactOverlay.classList.remove('open');
+                }
+            });
+        }
 
         // Initial auth and welcome message load on startup
         updateAuthUI();
