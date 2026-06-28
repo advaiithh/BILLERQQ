@@ -215,6 +215,13 @@ class BillerQClient:
                 follow_redirects=True,
             )
 
+        if self._client is not None and not self._client.is_closed:
+            current_auth = self._client.headers.get("Authorization")
+            expected_auth = f"Bearer {self._token}" if self._token else None
+            if str(self._client.base_url).rstrip("/") != str(self.base_url).rstrip("/") or current_auth != expected_auth:
+                logger.info("Closing cached HTTP client due to base URL or token mismatch")
+                await self._close_client()
+
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,

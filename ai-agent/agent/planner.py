@@ -43,6 +43,7 @@ VALID_INTENTS = {
     "ANALYTICS",
     "REPORT",
     "COMPLAINTS",
+    "RECURRING",
     "OVERDUE",
     "STB_INFO",
     "UNKNOWN",
@@ -140,6 +141,9 @@ class Planner:
 
         if re.search(r"\b(subscription|subscriptions|renewal)\b", text):
             return {"intent": "SUBSCRIPTION", "entities": {}, "uses_context": False, "confidence": 0.8}
+
+        if re.search(r"\b(recurring|recurring profiles|recurring invoices)\b", text):
+            return {"intent": "RECURRING", "entities": {}, "uses_context": False, "confidence": 0.9}
 
         return None
 

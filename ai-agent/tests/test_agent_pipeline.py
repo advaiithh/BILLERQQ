@@ -199,6 +199,82 @@ class TestBillerQAgentPipeline(unittest.TestCase):
         asyncio.run(agent.run("show problem types", billerq_token="mock_token"))
         self.assertEqual(agent._execute_tool.call_args[0][0], "get_problem_types")
 
+    def test_recurring_and_complaints_advanced_filtering(self):
+        """Test local filtering, customer name resolution, status/problem/area filtering for complaints and recurring invoices."""
+        from agent.agent_loop import BillerQAgent
+        from agent.resolver import resolver
+        mock_llm = MagicMock()
+        agent = BillerQAgent(llm=mock_llm)
+
+        # Mock customer resolver
+        resolver.resolve_customer = AsyncMock(side_effect=lambda name: {
+            "found": True,
+            "customer_id": 12345,
+            "customer_name": "Jinto Joseph"
+        } if "jinto" in str(name).lower() else {"found": False, "error": "Not found"})
+
+        # Mock tool execution
+        mock_complaints_data = {
+            "data": {
+                "data": [
+                    {"id": 1, "complaint_no": "C001", "customer_name": "Jinto Joseph", "problem_type": "Billing", "status": "Open", "area_name": "Kannur"},
+                    {"id": 2, "complaint_no": "C002", "customer_name": "Jane Smith", "problem_type": "Technical", "status": "In Progress", "area_name": "Delhi"},
+                    {"id": 3, "complaint_no": "C003", "customer_name": "Jinto Joseph", "problem_type": "Technical", "status": "Closed", "area_name": "Kannur"},
+                ]
+            }
+        }
+        mock_recurring_data = {
+            "data": {
+                "data": [
+                    {"id": 10, "customer_name": "Jinto Joseph", "subscriber_id": "SUB100", "package_name": "Base Pack", "type": "Master", "start_date": "2026-01-01"},
+                    {"id": 20, "customer_name": "Jane Smith", "subscriber_id": "SUB200", "package_name": "Premium Pack", "type": "Addon", "start_date": "2026-02-01"},
+                ]
+            }
+        }
+
+        async def mock_execute(name, args, *rest):
+            if name == "get_complaints":
+                return mock_complaints_data
+            elif name == "get_complaint_status_count":
+                return {"data": [{"status": "Open", "count": 1}, {"status": "In Progress", "count": 1}, {"status": "Closed", "count": 1}]}
+            elif name == "get_recurring_data":
+                return mock_recurring_data
+            return {"data": []}
+
+        agent._execute_tool = AsyncMock(side_effect=mock_execute)
+
+        # 1. Test query: complaints of Jinto Joseph
+        resp, meta = asyncio.run(agent.run("complaints of Jinto Joseph", billerq_token="mock_token"))
+        self.assertIn("Complaint #C001", resp)
+        self.assertIn("Complaint #C003", resp)
+        self.assertNotIn("Complaint #C002", resp)
+        self.assertIn("- **Open Complaints:** 1", resp)
+        self.assertIn("- **Closed Complaints:** 1", resp)
+        self.assertIn("- **In-Progress Complaints:** 0", resp)
+
+        # 2. Test query: billing complaints
+        resp, meta = asyncio.run(agent.run("billing complaints", billerq_token="mock_token"))
+        self.assertIn("Complaint #C001", resp)
+        self.assertNotIn("Complaint #C002", resp)
+        self.assertNotIn("Complaint #C003", resp)
+
+        # 3. Test query: complaints in Delhi
+        resp, meta = asyncio.run(agent.run("complaints in Delhi", billerq_token="mock_token"))
+        self.assertIn("Complaint #C002", resp)
+        self.assertNotIn("Complaint #C001", resp)
+
+        # 4. Test query: show closed complaints
+        resp, meta = asyncio.run(agent.run("show closed complaints", billerq_token="mock_token"))
+        self.assertIn("Complaint #C003", resp)
+        self.assertNotIn("Complaint #C001", resp)
+
+        # 5. Test query: recurring profiles of Jinto Joseph
+        resp, meta = asyncio.run(agent.run("recurring profiles of Jinto Joseph", billerq_token="mock_token"))
+        self.assertIn("Jinto Joseph", resp)
+        self.assertIn("Base Pack", resp)
+        self.assertNotIn("Jane Smith", resp)
+        self.assertNotIn("Premium Pack", resp)
+
 
 if __name__ == "__main__":
     unittest.main()

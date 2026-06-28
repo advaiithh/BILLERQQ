@@ -252,6 +252,47 @@ class Executor:
         if intent == "EXPIRING_SUBSCRIPTIONS":
             return await subscription.get_pending_subscriptions()
 
+        # ----- Recurring Intents -----
+        if intent == "RECURRING":
+            recurring_data = await subscription.get_recurring_data()
+            
+            # Local filtering by customer name / subscriber ID
+            items = []
+            if isinstance(recurring_data, dict):
+                items = recurring_data.get("data", [])
+            elif isinstance(recurring_data, list):
+                items = recurring_data
+
+            cust_name = entities.get("customer_name") or entities.get("mobile")
+            if cust_name:
+                cust_lower = str(cust_name).lower().strip()
+                from agent.resolver import resolver
+                try:
+                    res = await resolver.resolve_customer(cust_name)
+                    if res.get("found"):
+                        cust_lower = res["customer_name"].lower().strip()
+                except Exception:
+                    pass
+
+                is_digit = cust_lower.isdigit()
+                filtered = []
+                for item in items:
+                    cname = str(item.get("customer_name") or item.get("customer") or "").lower()
+                    sub_val = str(item.get("subscriber_id") or "").lower()
+                    if cust_lower in cname or cust_lower in sub_val:
+                        filtered.append(item)
+                    elif is_digit and cust_lower in str(item.get("id", "")):
+                        filtered.append(item)
+                items = filtered
+
+            if isinstance(recurring_data, dict):
+                recurring_data["data"] = items
+                recurring_data["total"] = len(items)
+            else:
+                recurring_data = items
+
+            return recurring_data
+
         # ----- Compare -----
         if intent == "COMPARE_CUSTOMERS":
             return await self._handle_compare(entities)
@@ -288,40 +329,122 @@ class Executor:
             status_count = await complaints.get_complaint_status_count()
             
             # Clean up/minimize complaints_data to prevent payload truncation
+            items = []
             if isinstance(complaints_data, dict) and "data" in complaints_data:
                 inner_data = complaints_data["data"]
                 if isinstance(inner_data, dict) and "data" in inner_data:
-                    complaints_list = inner_data["data"]
-                    if isinstance(complaints_list, list):
-                        cleaned_list = []
-                        for comp in complaints_list:
-                            cleaned_comp = {
-                                "id": comp.get("id"),
-                                "complaint_no": comp.get("complaint_no"),
-                                "customer_name": comp.get("customer_name"),
-                                "problem_type": comp.get("problem_type"),
-                                "status": comp.get("status"),
-                                "area_name": comp.get("area_name"),
-                                "subscriber_id": comp.get("subscriber_id"),
-                                "phone": comp.get("phone"),
-                                "assigned_user": comp.get("assigned_user"),
-                                "formatted_created_at": comp.get("formatted_created_at"),
-                                "updated_at": comp.get("updated_at"),
-                            }
-                            # Clean up the complaint forum comments
-                            forum = comp.get("complaint_forum")
-                            if isinstance(forum, list):
-                                cleaned_forum = []
-                                for f in forum:
-                                    cleaned_forum.append({
-                                        "comments": f.get("comments"),
-                                        "status": f.get("status"),
-                                        "updated_date": f.get("updated_date"),
-                                        "updated_by": f.get("updated_by"),
-                                    })
-                                cleaned_comp["complaint_forum"] = cleaned_forum
-                            cleaned_list.append(cleaned_comp)
-                        inner_data["data"] = cleaned_list
+                    items = inner_data["data"]
+            elif isinstance(complaints_data, list):
+                items = complaints_data
+
+            # Filter by customer name/subscriber id/mobile if specified
+            cust_name = entities.get("customer_name") or entities.get("mobile")
+            if cust_name:
+                cust_lower = str(cust_name).lower().strip()
+                from agent.resolver import resolver
+                try:
+                    res = await resolver.resolve_customer(cust_name)
+                    if res.get("found"):
+                        cust_lower = res["customer_name"].lower().strip()
+                except Exception:
+                    pass
+                
+                is_digit = cust_lower.isdigit()
+                filtered = []
+                for comp in items:
+                    cname = str(comp.get("customer_name") or comp.get("name") or "").lower()
+                    sub_val = str(comp.get("subscriber_id") or "").lower()
+                    phone_val = str(comp.get("phone") or "").lower()
+                    if cust_lower in cname or cust_lower in sub_val or cust_lower in phone_val:
+                        filtered.append(comp)
+                    elif is_digit and cust_lower in str(comp.get("id", "")):
+                        filtered.append(comp)
+                items = filtered
+
+            # Filter by problem_type
+            prob_type = entities.get("problem_type")
+            if prob_type:
+                prob_lower = str(prob_type).lower().strip()
+                items = [comp for comp in items if prob_lower in str(comp.get("problem_type") or "").lower()]
+
+            # Filter by area
+            area = entities.get("area_name")
+            if area:
+                area_lower = str(area).lower().strip()
+                items = [comp for comp in items if area_lower in str(comp.get("area_name") or "").lower()]
+
+            # Recalculate status count locally from filtered items before filtering by status itself
+            if cust_name or prob_type or area:
+                open_cnt = sum(1 for c in items if str(c.get("status", "")).lower() == "open")
+                prog_cnt = sum(1 for c in items if "progress" in str(c.get("status", "")).lower())
+                closed_cnt = sum(1 for c in items if str(c.get("status", "")).lower() in ("closed", "resolved"))
+                
+                if isinstance(status_count, dict) and "data" in status_count:
+                    status_count["data"] = [
+                        {"status": "Open", "count": open_cnt},
+                        {"status": "In Progress", "count": prog_cnt},
+                        {"status": "Closed", "count": closed_cnt},
+                        {"status": "Total", "count": len(items)}
+                    ]
+                elif isinstance(status_count, list):
+                    status_count = [
+                        {"status": "Open", "count": open_cnt},
+                        {"status": "In Progress", "count": prog_cnt},
+                        {"status": "Closed", "count": closed_cnt},
+                        {"status": "Total", "count": len(items)}
+                    ]
+                else:
+                    status_count = {"Pending": open_cnt + prog_cnt, "Resolved": closed_cnt}
+
+            # Filter by status
+            status_f = entities.get("status")
+            if status_f:
+                status_lower = status_f.lower().replace("-", " ").strip()
+                if status_lower in ("closed", "resolved"):
+                    items = [comp for comp in items if str(comp.get("status", "")).lower() in ("closed", "resolved")]
+                elif "progress" in status_lower:
+                    items = [comp for comp in items if "progress" in str(comp.get("status", "")).lower()]
+                elif status_lower == "open":
+                    items = [comp for comp in items if str(comp.get("status", "")).lower() == "open"]
+                else:
+                    items = [comp for comp in items if status_lower in str(comp.get("status", "")).lower()]
+
+            cleaned_list = []
+            for comp in items:
+                cleaned_comp = {
+                    "id": comp.get("id"),
+                    "complaint_no": comp.get("complaint_no"),
+                    "customer_name": comp.get("customer_name"),
+                    "problem_type": comp.get("problem_type"),
+                    "status": comp.get("status"),
+                    "area_name": comp.get("area_name"),
+                    "subscriber_id": comp.get("subscriber_id"),
+                    "phone": comp.get("phone"),
+                    "assigned_user": comp.get("assigned_user"),
+                    "formatted_created_at": comp.get("formatted_created_at"),
+                    "updated_at": comp.get("updated_at"),
+                }
+                forum = comp.get("complaint_forum")
+                if isinstance(forum, list):
+                    cleaned_forum = []
+                    for f in forum:
+                        cleaned_forum.append({
+                            "comments": f.get("comments"),
+                            "status": f.get("status"),
+                            "updated_date": f.get("updated_date"),
+                            "updated_by": f.get("updated_by"),
+                        })
+                    cleaned_comp["complaint_forum"] = cleaned_forum
+                cleaned_list.append(cleaned_comp)
+
+            if isinstance(complaints_data, dict) and "data" in complaints_data:
+                inner_data = complaints_data["data"]
+                if isinstance(inner_data, dict):
+                    inner_data["data"] = cleaned_list
+                else:
+                    complaints_data["data"] = cleaned_list
+            else:
+                complaints_data = cleaned_list
 
             return {
                 "complaints": complaints_data,

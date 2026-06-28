@@ -1,0 +1,8 @@
+{
+  "response": "📊 **Recurring Invoices List (9 total):**\n\n• **testcust ** (Sub ID: **100000001**)\n  - **Package:** tp\n  - **Type:** Master\n  - **Start Date:** 17-June-2026\n• **testcust ** (Sub ID: **100000001**)\n  - **Package:** tp\n  - **Type:** Master\n  - **Start Date:** 17-June-2026\n• **testcust ** (Sub ID: **100000001**)\n  - **Package:** tp\n  - **Type:** Master\n  - **Start Date:** 17-June-2026\n• **testcust ** (Sub ID: **100000001**)\n  - **Package:** tp\n  - **Type:** Master\n  - **Start Date:** 20-June-2026\n• **tstcust ** (Sub ID: **CUST0244**)\n  - **Package:** tp\n  - **Type:** Master\n  - **Start Date:** 20-June-2026\n\n📊 **Recurring Metrics Summary:**\n- **Recurring Profiles Listed:** 5\n- **Total Recurring Profiles:** 9\n\nFor the remaining, click the link below.",
+  "session_id": "test-session-123",
+  "metadata": {
+    "redirect_url": "/billing/recurring",
+    "redirect_label": "View recurring"
+  }
+}
