@@ -1,7 +1,7 @@
 import os, sys, asyncio
 from pathlib import Path
 
-agent_dir = Path("c:/Users/Lenovo/Desktop/Chatbot/ai-agent")
+agent_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(agent_dir))
 os.chdir(agent_dir)
 
