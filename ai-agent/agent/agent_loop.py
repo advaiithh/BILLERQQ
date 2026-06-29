@@ -718,6 +718,10 @@ class BillerQAgent:
                 fast_result = {"tool": "get_wallet_report", "arguments": {}, "customer_name": None}
             elif any(k in msg_lower for k in ["cancelled invoice", "cancelled invoices", "cancelled order", "cancelled orders", "canceled invoice", "canceled invoices", "canceled order", "canceled orders"]):
                 fast_result = {"tool": "get_cancelled_invoices", "arguments": {}, "customer_name": None}
+            elif any(k in msg_lower for k in ["collection", "collected", "revenue meter"]) or any(k in msg_lower for k in ["outstanding dues", "total dues", "dues", "wallet", "total balance", "total balancwe", "check balance", "check the balance", "check total balance", "check the total balance", "check total balancwe", "check the total balancwe"]):
+                fast_result = {"tool": "get_dashboard_data", "arguments": {}, "customer_name": None}
+            elif "unpaid" in msg_lower:
+                fast_result = {"tool": "get_unpaid_customers", "arguments": {}, "customer_name": None}
             elif name_extracted:
                 tool = "get_customer_profile"
                 if "payment" in msg_lower or "history" in msg_lower:
@@ -737,10 +741,6 @@ class BillerQAgent:
                 fast_result = {"tool": "get_customer_status_count", "arguments": {}, "customer_name": None}
             elif re.search(r"\b(active|inactive|total)\s+customers?\b", msg_lower) or re.search(r"\bhow many active\b", msg_lower):
                 fast_result = {"tool": "get_customer_status_count", "arguments": {}, "customer_name": None}
-            elif any(k in msg_lower for k in ["collection", "collected", "revenue meter"]) or any(k in msg_lower for k in ["outstanding dues", "total dues", "dues", "wallet"]):
-                fast_result = {"tool": "get_dashboard_data", "arguments": {}, "customer_name": None}
-            elif "unpaid" in msg_lower:
-                fast_result = {"tool": "get_unpaid_customers", "arguments": {}, "customer_name": None}
             elif any(k in msg_lower for k in ["enquiries", "enquiry"]):
                 fast_result = {"tool": "get_enquiries", "arguments": {}, "customer_name": None}
             elif any(k in msg_lower for k in ["leads", "lead"]):
