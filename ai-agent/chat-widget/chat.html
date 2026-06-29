@@ -141,7 +141,7 @@
             background: var(--bg-dark);
             border-radius: var(--radius);
             border: 1px solid var(--border);
-            box-shadow: var(--shadow-lg);
+            /* shadow removed */
             z-index: 99998;
             display: flex;
             flex-direction: column;
@@ -176,15 +176,17 @@
         .chat-header-actions {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             margin-left: auto;
             flex-shrink: 0;
         }
 
+        /* Guide + Contact grouped row */
         .header-column-actions {
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             gap: 6px;
+            align-items: center;
         }
 
         .chat-header-avatar {
@@ -466,6 +468,8 @@
             border: 1px solid var(--border);
             padding: 4px 6px 4px 10px;
             transition: var(--transition);
+            /* Fixed height so buttons never jump */
+            min-height: 52px;
         }
 
         .chat-input-wrapper:focus-within {
@@ -475,6 +479,7 @@
 
         .chat-input-wrapper input {
             flex: 1;
+            min-width: 0;       /* prevent flex overflow */
             border: none;
             outline: none;
             background: transparent;
@@ -678,33 +683,28 @@
            Guide Button
            ============================================================ */
         .guide-btn {
+            width: 32px;
+            height: 32px;
             display: flex;
             align-items: center;
-            gap: 5px;
+            justify-content: center;
             background: rgba(162, 155, 254, 0.15);
             border: 1px solid rgba(162, 155, 254, 0.3);
             color: var(--primary-light);
-            font-family: var(--font);
-            font-size: 10px;
-            font-weight: 600;
-            padding: 4px 8px;
-            border-radius: 12px;
+            border-radius: 50%;
             cursor: pointer;
-            text-decoration: none;
             transition: background 0.2s, border-color 0.2s, transform 0.15s;
-            white-space: nowrap;
-            width: 82px;
-            justify-content: flex-start;
-            box-sizing: border-box;
+            flex-shrink: 0;
+            padding: 0;
         }
         .guide-btn:hover {
             background: rgba(162, 155, 254, 0.28);
             border-color: rgba(162, 155, 254, 0.55);
-            transform: translateY(-1px);
+            transform: scale(1.08);
         }
         .guide-btn svg {
-            width: 12px;
-            height: 12px;
+            width: 18px;
+            height: 18px;
             fill: currentColor;
             flex-shrink: 0;
         }
@@ -942,31 +942,28 @@
            Clear Button
            ============================================================ */
         .clear-btn {
+            width: 34px;
+            height: 34px;
             display: flex;
             align-items: center;
-            gap: 5px;
+            justify-content: center;
             background: rgba(229, 49, 112, 0.12);
             border: 1px solid rgba(229, 49, 112, 0.25);
             color: var(--error);
-            font-family: var(--font);
-            font-size: 11.5px;
-            font-weight: 600;
-            padding: 5px 11px;
-            border-radius: 20px;
+            border-radius: 50%;
             cursor: pointer;
-            text-decoration: none;
             transition: background 0.2s, border-color 0.2s, transform 0.15s;
-            white-space: nowrap;
-            margin: 0;
+            flex-shrink: 0;
+            padding: 0;
         }
         .clear-btn:hover {
             background: rgba(229, 49, 112, 0.25);
             border-color: rgba(229, 49, 112, 0.5);
-            transform: translateY(-1px);
+            transform: scale(1.08);
         }
         .clear-btn svg {
-            width: 13px;
-            height: 13px;
+            width: 18px;
+            height: 18px;
             fill: currentColor;
             flex-shrink: 0;
         }
@@ -1203,33 +1200,28 @@
            Contact Button
            ============================================================ */
         .contact-btn {
+            width: 32px;
+            height: 32px;
             display: flex;
             align-items: center;
-            gap: 5px;
+            justify-content: center;
             background: rgba(46, 204, 113, 0.12);
             border: 1px solid rgba(46, 204, 113, 0.25);
             color: #2ecc71;
-            font-family: var(--font);
-            font-size: 10px;
-            font-weight: 600;
-            padding: 4px 8px;
-            border-radius: 12px;
+            border-radius: 50%;
             cursor: pointer;
-            text-decoration: none;
             transition: background 0.2s, border-color 0.2s, transform 0.15s;
-            white-space: nowrap;
-            width: 82px;
-            justify-content: flex-start;
-            box-sizing: border-box;
+            flex-shrink: 0;
+            padding: 0;
         }
         .contact-btn:hover {
             background: rgba(46, 204, 113, 0.25);
             border-color: rgba(46, 204, 113, 0.5);
-            transform: translateY(-1px);
+            transform: scale(1.08);
         }
         .contact-btn svg {
-            width: 12px;
-            height: 12px;
+            width: 18px;
+            height: 18px;
             fill: currentColor;
             flex-shrink: 0;
         }
@@ -1397,16 +1389,13 @@
             <div class="chat-header-actions">
                 <button class="clear-btn" id="clearChatBtn" title="Clear Chat History">
                     <svg viewBox="0 0 24 24"><path d="M16 9v10H8V9h8m-1.5-6h-5l-1 1H5v2h14V4h-3.5l-1-1zM18 7H6v12c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7z"/></svg>
-                    Clear
                 </button>
                 <div class="header-column-actions">
                     <button class="guide-btn" id="guidBtn" title="Open BillerQ Guide">
                         <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
-                        Guide
                     </button>
-                    <button class="contact-btn" id="contactBtn" title="Contact Us Details">
+                    <button class="contact-btn" id="contactBtn" title="Contact Us">
                         <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
-                        Contact
                     </button>
                 </div>
             </div>
@@ -1956,62 +1945,110 @@
         }
 
         // ============================================================
-        // Voice Input Handling (Speech to Text)
+        // Voice Input — Web Speech API (Chrome / Edge / Safari)
+        // Auto-sends when speech ends. Shows live interim results.
         // ============================================================
         if (micBtn) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (SpeechRecognition) {
+
+            if (!SpeechRecognition) {
+                // Not supported — grey out and show tooltip
+                micBtn.disabled = true;
+                micBtn.title = 'Voice input not supported in this browser. Use Chrome or Edge.';
+                micBtn.style.opacity = '0.35';
+            } else {
                 const recognition = new SpeechRecognition();
-                recognition.continuous = false;
-                recognition.lang = 'en-IN'; // Optimized for Indian English accent
-                recognition.interimResults = false;
+                recognition.continuous     = false;   // single utterance
+                recognition.interimResults = true;    // show words as you speak
+                recognition.lang           = 'en-IN'; // Indian English; change to 'ml-IN' for Malayalam
                 recognition.maxAlternatives = 1;
 
-                let isRecording = false;
+                let isRecording    = false;
+                let interimTimeout = null;
 
+                // ---- Start / Stop toggle ----
                 micBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     if (isRecording) {
                         recognition.stop();
                     } else {
+                        chatInput.value = '';
+                        sendBtn.disabled = true;
                         try {
                             recognition.start();
                         } catch (err) {
-                            console.error('Speech recognition failed to start:', err);
+                            console.warn('Recognition already running:', err);
                         }
                     }
                 });
 
+                // ---- Recording started ----
                 recognition.onstart = () => {
                     isRecording = true;
                     micBtn.classList.add('recording');
-                    chatInput.placeholder = 'Listening... Speak now';
+                    micBtn.title = 'Tap to stop recording';
+                    chatInput.placeholder = '🎙️  Listening… speak now';
                 };
 
+                // ---- Live interim results (shows words as you speak) ----
+                recognition.onresult = (event) => {
+                    let interimText  = '';
+                    let finalText    = '';
+
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const t = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            finalText += t;
+                        } else {
+                            interimText += t;
+                        }
+                    }
+
+                    // Show live text in input (interim = dimmed via placeholder trick)
+                    if (interimText) {
+                        chatInput.value = interimText;
+                        sendBtn.disabled = true; // don't send yet
+                    }
+                    if (finalText) {
+                        chatInput.value = finalText.trim();
+                        sendBtn.disabled = false;
+                    }
+                };
+
+                // ---- Recording stopped (end of utterance) ----
                 recognition.onend = () => {
                     isRecording = false;
                     micBtn.classList.remove('recording');
+                    micBtn.title = 'Voice input';
                     chatInput.placeholder = 'Ask me anything about BillerQ...';
+
+                    // Auto-send if we have a transcript
+                    const transcript = chatInput.value.trim();
+                    if (transcript && !isLoading) {
+                        // Small delay so user sees what was transcribed
+                        setTimeout(() => {
+                            sendMessage();
+                        }, 400);
+                    }
                 };
 
+                // ---- Errors ----
                 recognition.onerror = (event) => {
-                    console.error('Speech recognition error:', event.error);
                     isRecording = false;
                     micBtn.classList.remove('recording');
                     chatInput.placeholder = 'Ask me anything about BillerQ...';
-                };
+                    chatInput.value = '';
 
-                recognition.onresult = (event) => {
-                    const resultText = event.results[0][0].transcript;
-                    if (resultText) {
-                        chatInput.value = resultText;
-                        sendBtn.disabled = !chatInput.value.trim() || isLoading;
-                        chatInput.focus();
-                    }
+                    const friendly = {
+                        'no-speech'       : 'No speech detected. Try again.',
+                        'audio-capture'   : 'Microphone not found. Check your mic.',
+                        'not-allowed'     : 'Mic access denied. Allow it in browser settings.',
+                        'network'         : 'Network error during voice recognition.',
+                    };
+                    const msg = friendly[event.error] || `Voice error: ${event.error}`;
+                    addMessage(msg, 'bot');
+                    console.warn('Speech recognition error:', event.error);
                 };
-            } else {
-                // If browser doesn't support Web Speech API, hide the microphone icon
-                micBtn.style.display = 'none';
             }
         }
 
