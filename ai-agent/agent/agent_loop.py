@@ -413,7 +413,10 @@ class BillerQAgent:
             is_active_list = "active" in msg_lower and not any(k in msg_lower for k in ["count", "how many", "percentage", "number of"])
 
             # 5. Latest added customer
-            is_latest_cust = any(k in msg_lower for k in ["latest added", "newest", "recently added", "latest customer", "newest customer"])
+            is_latest_cust = any(k in msg_lower for k in ["latest added", "newest", "recently added", "latest customer", "newest customer", "recent customer", "recent customers"])
+
+            # 5a. All customers listing
+            is_all_customers_list = any(k in msg_lower for k in ["all customers", "list customers", "show customers", "list of customers"])
 
             # 5b. Customer comparison: "compare X and Y" / "X vs Y" / "difference between X and Y"
             compare_names = None
@@ -658,6 +661,8 @@ class BillerQAgent:
                 fast_result = {"tool": "get_all_customers", "arguments": {"status": "active"}, "customer_name": "active_list"}
             elif is_latest_cust:
                 fast_result = {"tool": "get_all_customers", "arguments": {"page_length": 5}, "customer_name": "latest"}
+            elif is_all_customers_list:
+                fast_result = {"tool": "get_all_customers", "arguments": {}, "customer_name": None}
             elif any(k in msg_lower for k in ["cancelled invoice", "cancelled invoices", "cancelled order", "cancelled orders", "canceled invoice", "canceled invoices", "canceled order", "canceled orders"]):
                 fast_result = {"tool": "get_cancelled_invoices", "arguments": {}, "customer_name": None}
             elif name_extracted:
