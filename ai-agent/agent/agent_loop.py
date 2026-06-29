@@ -315,37 +315,88 @@ class BillerQAgent:
             # Step 1: Route/Select Tool
             # -------------------------------------------------------------
             msg_lower = message.lower().strip()
-            
-            # Direct UI navigation routing
             navigation_mappings = {
+                # Dashboard
                 ("dashboard",): ("/dashboard/default", "Dashboard"),
-                ("lead management", "lead manager", "leads", "enquiries", "enquiry"): ("/lead-manage/lead", "Lead Management"),
-                ("customer management", "customers", "customer list", "customer"): ("/customers/customer", "Customer Management"),
-                ("billing management", "billing", "subscriptions", "recurring", "subscription", "recurring list"): ("/billing/subscription", "Billing Management"),
-                ("services & products", "services", "products", "addons", "addon", "items", "item"): ("/Services/addon", "Services & Products"),
-                ("expenses & income", "expenses", "income", "expense", "vendors", "headers"): ("/expenses-income/expense", "Financial Management > Expenses & Income"),
-                ("banking", "bank", "transactions", "transaction", "accounts"): ("/banking/account", "Financial Management > Banking"),
-                ("reports & analytics", "reports", "report", "analytics", "collection report", "tax report", "wallet report"): ("/report/unpaid-customer", "Reports & Analytics"),
-                ("complaint management", "complaints", "complaint", "problems"): ("/complaints", "Complaint Management"),
-                ("staff management", "staff", "roles", "role"): ("/staff/staff", "Staff Management"),
-                ("system settings", "settings", "tax classes", "providers", "categories"): ("/settings/categories", "System Settings")
+                
+                # Lead Manager
+                ("enquiry", "enquiries"): ("/lead-manage/enquiry", "Lead Manager > Enquiries"),
+                ("lead", "leads"): ("/lead-manage/lead", "Lead Manager > Leads"),
+                ("follow up", "follow ups", "follow-up", "follow-ups"): ("/lead-manage/follow-up", "Lead Manager > Follow-Ups"),
+                ("overdue", "overdues"): ("/report/payment-due", "Lead Manager > Overdues"),
+                
+                # Customers
+                ("customer archive", "archived customer", "archived customers", "archive"): ("/customers/customer-archive", "Customers > Customer Archive"),
+                ("customer", "customers", "customer list"): ("/customers/customer", "Customers > Customer"),
+                ("stb", "modem", "stbs", "modems", "stb / modem"): ("/dashboard/default", "Customers > STB / Modem"),
+                ("wallet", "wallets", "customer wallet", "customer wallets"): ("/customers/wallet", "Customers > Wallet"),
+                
+                # Billing
+                ("activate subscription", "activate subscriptions"): ("/billing/subscription", "Billing > Activate Subscription"),
+                ("subscription", "subscriptions"): ("/billing/subscription", "Billing > Subscription"),
+                ("cancelled invoice", "cancelled invoices", "canceled invoice", "canceled invoices"): ("/billing/cancelled-invoice", "Billing > Cancelled Invoice"),
+                ("invoice", "invoices"): ("/billing/invoice", "Billing > Invoice"),
+                ("recurring", "recurring profiles", "recurring list"): ("/billing/recurring", "Billing > Recurring"),
+                
+                # Services / Products
+                ("package", "packages"): ("/dashboard/default", "Services / Products > Packages"),
+                ("addon", "addons"): ("/Services/addon", "Services / Products > Addons"),
+                ("item", "items"): ("/Services/item", "Services / Products > Items"),
+                
+                # Expenses & Income
+                ("expense", "expenses"): ("/expenses-income/expense", "Expenses & Income > Expense"),
+                ("income", "incomes"): ("/expenses-income/income", "Expenses & Income > Income"),
+                ("header", "headers", "expense header", "expense headers"): ("/expenses-income/header", "Expenses & Income > Header"),
+                ("vendor", "vendors"): ("/expenses-income/vendor", "Expenses & Income > Vendor"),
+                
+                # Banking
+                ("account", "accounts", "bank account", "bank accounts"): ("/banking/account", "Banking > Account"),
+                ("transaction", "transactions", "bank transaction", "bank transactions"): ("/banking/transaction", "Banking > Transaction"),
+                
+                # Reports
+                ("online payment", "online payments"): ("/report/online-payment", "Reports > Online Payment"),
+                ("customer payment", "customer payments"): ("/report/customer-payment", "Reports > Customer Payment"),
+                ("payment collection", "payment collections"): ("/report/payment-collection", "Reports > Payment Collection"),
+                ("unpaid customer", "unpaid customers"): ("/report/unpaid-customer", "Reports > Unpaid Customer"),
+                ("payment due", "payments due"): ("/report/payment-due", "Reports > Payment Due"),
+                ("subscription summary", "subscription summary report"): ("/report/subscription-summary", "Reports > Subscription Summary"),
+                ("package summary", "package summary report"): ("/report/package-summary", "Reports > Package Summary"),
+                ("addon summary", "addon summary report"): ("/report/addon-summary", "Reports > Addon Summary"),
+                ("tax report", "tax reports"): ("/report/tax-report", "Reports > Tax Report"),
+                ("sms logs", "sms log"): ("/report/sms-message-logs", "Reports > SMS Logs"),
+                ("whatsapp logs", "whatsapp log"): ("/report/whatsApp-message-logs", "Reports > WhatsApp Logs"),
+                ("wallet balance", "wallet balances"): ("/report/wallet-balance", "Reports > Wallet Balance"),
+                ("income summary", "income summaries"): ("/report/income-summary", "Reports > Income Summary"),
+                ("expense summary", "expense summaries"): ("/report/expense-summary", "Reports > Expense Summary"),
+                
+                # Complaints
+                ("complaint list", "complaints", "complaint", "problems"): ("/complaints", "Complaints > Complaint List"),
+                
+                # Staff
+                ("staff", "staffs"): ("/staff/staff", "Staff > Staff"),
+                ("role", "roles"): ("/staff/role", "Staff > Role"),
+                
+                # Settings
+                ("area", "areas"): ("/settings/area", "Settings > Area"),
+                ("message credit", "message credits", "sms credit", "sms credits"): ("/settings/message-credit", "Settings > Message Credit"),
+                ("cas provider", "isp provider", "cas providers", "isp providers", "cas / isp provider"): ("/settings/cas-isp-provider", "Settings > CAS / ISP Provider"),
+                ("payment method", "payment methods"): ("/settings/payment-method", "Settings > Payment Method"),
+                ("categories", "category"): ("/settings/categories", "Settings > Categories"),
+                ("tax class", "tax classes"): ("/settings/tax-class", "Settings > Tax Class")
             }
-            
-            # Pure categories that default to redirection on exact match
-            pure_categories = {
-                "dashboard", "lead management", "customer management", "billing management",
-                "services & products", "financial management", "expenses & income", "banking",
-                "reports & analytics", "complaint management", "staff management", "system settings"
-            }
-            
-            is_navigation_request = any(kw in msg_lower for kw in ("redirect", "go to", "open", "navigate", "show me page", "show page", "view page"))
+
+            is_navigation_request = any(kw in msg_lower for kw in ("redirect", "go to", "open", "navigate", "show page", "view page"))
             
             exact_match = None
+            best_match_len = -1
             for keywords, (path, label) in navigation_mappings.items():
-                is_pure_match = msg_lower in pure_categories and msg_lower in keywords
-                if is_pure_match or (is_navigation_request and any(kw in msg_lower for kw in keywords)):
-                    exact_match = (path, label)
-                    break
+                for kw in keywords:
+                    is_exact = msg_lower == kw
+                    is_nav = is_navigation_request and bool(re.search(rf"\b{re.escape(kw)}\b", msg_lower))
+                    if is_exact or is_nav:
+                        if len(kw) > best_match_len:
+                            best_match_len = len(kw)
+                            exact_match = (path, label)
                     
             if exact_match:
                 path, label = exact_match
@@ -358,7 +409,7 @@ class BillerQAgent:
             fast_result = None
 
             # Check for guide / help / tutorial requests first (highest priority)
-            is_guide_query = any(kw in msg_lower for kw in ("guide", "how to", "where is", "help me with", "tell me about", "what is", "how do i", "tutorial", "help"))
+            is_guide_query = any(re.search(rf"\b{re.escape(kw)}\b", msg_lower) for kw in ("guide", "how to", "where is", "help me with", "tell me about", "what is", "how do i", "tutorial", "help"))
             if is_guide_query:
                 category = "billerq"
                 if "cust" in msg_lower or "coudt" in msg_lower or "subscr" in msg_lower:
@@ -1745,9 +1796,15 @@ class BillerQAgent:
                     if not wallet_list:
                         rule_based_response = "No wallet records reported."
                     else:
-                        lines = [f"Total wallet balance: ₹{format_curr(total_balance)}", "Top customer wallet balances:"]
+                        lines = [
+                            f"💳 **Wallet Balance Report Summary** (Total Balance: ₹{format_curr(total_balance)}):\n",
+                            "Top customer wallet balances:\n"
+                        ]
                         for item in wallet_list[:5]:
-                            lines.append(f"• {item.get('customer_name')}: ₹{item.get('balance')}")
+                            lines.append(
+                                f"👤 **{item.get('customer_name')}**\n"
+                                f"• **Wallet Balance:** ₹{item.get('balance')} 🟢\n"
+                            )
                         rule_based_response = "\n".join(lines)
 
                 # 22. get_tax_report
