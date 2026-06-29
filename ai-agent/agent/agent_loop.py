@@ -574,8 +574,34 @@ class BillerQAgent:
             if "recurring" in msg_lower:
                 fast_result = {"tool": "get_recurring_data", "arguments": {}, "customer_name": name_extracted}
             elif agent_col_match:
-                agent_name = agent_col_match.group(1).strip()
-                fast_result = {"tool": "get_connection_data", "arguments": {}, "customer_name": agent_name}
+                raw_agent_name = agent_col_match.group(1).strip()
+                agent_name = re.sub(r"\b(report|of|for|by|agent)\b", "", raw_agent_name.lower()).strip()
+                if not agent_name or agent_name == "all":
+                    agent_name = None
+                
+                # Check for date parameters in the query
+                start_date = None
+                end_date = None
+                if "last year" in msg_lower or "2025" in msg_lower:
+                    start_date = "01-01-2025"
+                    end_date = "31-12-2025"
+                elif "this year" in msg_lower or "2026" in msg_lower:
+                    start_date = "01-01-2026"
+                    end_date = "31-12-2026"
+                elif "2024" in msg_lower:
+                    start_date = "01-01-2024"
+                    end_date = "31-12-2024"
+                
+                args = {}
+                if start_date and end_date:
+                    args["start_date"] = start_date
+                    args["end_date"] = end_date
+                    
+                fast_result = {
+                    "tool": "get_agent_collection_report",
+                    "arguments": args,
+                    "customer_name": agent_name
+                }
             elif any(k in msg_lower for k in ["item list", "items list", "show items", "list items"]):
                 fast_result = {"tool": "get_items", "arguments": {}, "customer_name": None}
             elif any(k in msg_lower for k in ["staff list", "show staff", "view staff", "list staff", "agent list", "agents list"]):
@@ -772,6 +798,8 @@ class BillerQAgent:
             # -------------------------------------------------------------
             resolved_cust_id = None
             resolved_cust_name = None
+            resolved_agent_id = None
+            resolved_agent_name = None
             
             # If the tool is a customer tool, or customer_name_query is present
             requires_customer = tool_name in (
@@ -896,6 +924,34 @@ class BillerQAgent:
                 # If the tool was just search_customer, promote it to get_customer_profile for richer details
                 if tool_name == "search_customer":
                     tool_name = "get_customer_profile"
+
+            # If it is agent collection report, we resolve agent name to user_id
+            if tool_name == "get_agent_collection_report" and customer_name_query:
+                try:
+                    users_resp = await self._execute_tool("get_user_select", {}, billerq_token, billerq_api_url, billerq_user_role)
+                    users_list = users_resp.get("data", []) if isinstance(users_resp, dict) else []
+                    
+                    matched_user = None
+                    agent_query = str(customer_name_query).lower().strip()
+                    agent_query = re.sub(r"\b(report|of|for|by|agent)\b", "", agent_query).strip()
+                    
+                    for u in users_list:
+                        u_name = str(u.get("user_name", "")).lower()
+                        if agent_query == u_name:
+                            matched_user = u
+                            break
+                    if not matched_user:
+                        for u in users_list:
+                            u_name = str(u.get("user_name", "")).lower()
+                            if agent_query in u_name or u_name in agent_query:
+                                matched_user = u
+                                break
+                    if matched_user:
+                        resolved_agent_id = matched_user.get("user_id")
+                        resolved_agent_name = matched_user.get("user_name")
+                        logger.info("Resolved agent name to user_id: %s (ID: %s)", resolved_agent_name, resolved_agent_id)
+                except Exception:
+                    logger.exception("Error resolving agent user_id")
 
             # -------------------------------------------------------------
             # Step 3: Tool Execution
@@ -1673,13 +1729,61 @@ class BillerQAgent:
                     payments = rep_data.get("payments", {})
                     payments_list = payments.get("data", []) if isinstance(payments, dict) else payments
                     total_amount = rep_data.get("total_amount", 0.0)
-                    if not payments_list:
-                        rule_based_response = "No agent payments reported."
+                    
+                    filter_agent = resolved_agent_name or customer_name_query
+                    if filter_agent:
+                        filter_agent_lower = str(filter_agent).lower().strip()
+                        filter_agent_lower = re.sub(r"\b(report|of|for|by|agent)\b", "", filter_agent_lower).strip()
                     else:
-                        lines = [f"Total Agent Collection: ₹{format_curr(total_amount)}", "Recent Agent collection logs:"]
-                        for item in payments_list[:5]:
-                            lines.append(f"• Invoice {item.get('invoice_no')}: ₹{item.get('collected_amount')} from {item.get('customer_name')} ({item.get('account_name')})")
-                        rule_based_response = "\n".join(lines)
+                        filter_agent_lower = None
+                        
+                    if filter_agent_lower:
+                        filtered_list = []
+                        filtered_total = 0.0
+                        for item in payments_list:
+                            item_agent = str(item.get("account_name", "")).lower()
+                            if filter_agent_lower in item_agent or item_agent in filter_agent_lower:
+                                filtered_list.append(item)
+                                try:
+                                    filtered_total += float(str(item.get("collected_amount", 0)).replace(",", "").strip())
+                                except Exception:
+                                    pass
+                        
+                        time_label = "This Month"
+                        if "last year" in msg_lower or "2025" in msg_lower:
+                            time_label = "Last Year (2025)"
+                        elif "this year" in msg_lower or "2026" in msg_lower:
+                            time_label = "This Year (2026)"
+                        elif "2024" in msg_lower:
+                            time_label = "2024"
+                            
+                        if not filtered_list:
+                            rule_based_response = f"No collection logs found for agent **{filter_agent}** for {time_label}."
+                        else:
+                            lines = [
+                                f"👤 **Collection Details for Agent:** **{filtered_list[0].get('account_name')}** ({time_label})",
+                                f"• Total Collection: **₹{self._format_curr(filtered_total)}**",
+                                "\n**Collection logs:**"
+                            ]
+                            for item in filtered_list[:5]:
+                                lines.append(f"• Invoice {item.get('invoice_no')}: **₹{item.get('collected_amount')}** from {item.get('customer_name')} on {item.get('paid_date')}")
+                            rule_based_response = "\n".join(lines)
+                    else:
+                        if not payments_list:
+                            rule_based_response = "No agent payments reported."
+                        else:
+                            time_label = "this month"
+                            if "last year" in msg_lower or "2025" in msg_lower:
+                                time_label = "last year (2025)"
+                            elif "this year" in msg_lower or "2026" in msg_lower:
+                                time_label = "this year (2026)"
+                            elif "2024" in msg_lower:
+                                time_label = "2024"
+                                
+                            lines = [f"Total Agent Collection ({time_label}): **₹{self._format_curr(total_amount)}**", "\n**Recent Agent collection logs:**"]
+                            for item in payments_list[:5]:
+                                lines.append(f"• Invoice {item.get('invoice_no')}: **₹{item.get('collected_amount')}** from {item.get('customer_name')} ({item.get('account_name')})")
+                            rule_based_response = "\n".join(lines)
 
                 # 26. get_expense_summary
                 elif tool_name == "get_expense_summary":
@@ -2095,7 +2199,7 @@ class BillerQAgent:
 
             if rule_based_response:
                 logger.info("Bypassing Formatter LLM — using rule-based response: '%s'", rule_based_response)
-                metadata = self._get_redirect_metadata(tool_name, resolved_cust_id, resolved_cust_name, message)
+                metadata = self._get_redirect_metadata(tool_name, resolved_cust_id, resolved_cust_name, message, resolved_agent_id=resolved_agent_id)
                 return rule_based_response, metadata
 
             formatter_system_prompt = FORMATTER_SYSTEM_PROMPT_TEMPLATE.format(current_date=current_date)
@@ -2132,7 +2236,7 @@ class BillerQAgent:
                 final_text = "I encountered an issue formatting the API response. Here is the raw information: " + data_str[:500]
 
             # Ensure that redirect button metadata matches the tool executed
-            metadata = self._get_redirect_metadata(tool_name, resolved_cust_id, resolved_cust_name, message)
+            metadata = self._get_redirect_metadata(tool_name, resolved_cust_id, resolved_cust_name, message, resolved_agent_id=resolved_agent_id)
             
             return final_text, metadata
         finally:
@@ -2173,7 +2277,7 @@ class BillerQAgent:
                 
         return {"tool": "none", "arguments": {}, "customer_name": None}
 
-    def _get_redirect_metadata(self, tool_name: str, resolved_cust_id: int = None, resolved_cust_name: str = None, message_str: str = "") -> dict:
+    def _get_redirect_metadata(self, tool_name: str, resolved_cust_id: int = None, resolved_cust_name: str = None, message_str: str = "", resolved_agent_id: int = None) -> dict:
         """Constructs redirection metadata for the frontend."""
         metadata = {}
         if resolved_cust_id:
@@ -2244,6 +2348,34 @@ class BillerQAgent:
             # If it's a collection query (either overall collections or agent collections), redirect to collection report
             if resolved_cust_name or resolved_cust_id or any(k in message_str.lower() for k in ["agent", "collection", "due"]):
                 tool_map["get_connection_data"] = ("/report/payment-collection", "View report")
+        elif tool_name == "get_agent_collection_report":
+            base_url = "/report/payment-collection"
+            params = []
+            msg_lower = message_str.lower()
+            start_date, end_date = None, None
+            if "last year" in msg_lower or "2025" in msg_lower:
+                start_date = "01-01-2025"
+                end_date = "31-12-2025"
+            elif "this year" in msg_lower or "2026" in msg_lower:
+                start_date = "01-01-2026"
+                end_date = "31-12-2026"
+            elif "2024" in msg_lower:
+                start_date = "01-01-2024"
+                end_date = "31-12-2024"
+                
+            if start_date and end_date:
+                params.append(f"start_date={start_date}")
+                params.append(f"end_date={end_date}")
+                
+            if resolved_agent_id:
+                params.append(f"user={resolved_agent_id}")
+                
+            if params:
+                redirect_url = f"{base_url}?{'&'.join(params)}"
+            else:
+                redirect_url = base_url
+                
+            tool_map["get_agent_collection_report"] = (redirect_url, "View report")
 
         url_label = tool_map.get(tool_name)
         if url_label:

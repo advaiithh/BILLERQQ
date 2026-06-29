@@ -79,14 +79,23 @@ async def get_subscription_report() -> dict:
     return await api_client.get("subscription_report")
 
 
-async def get_agent_collection_report() -> dict:
+async def get_agent_collection_report(start_date: str | None = None, end_date: str | None = None) -> dict:
     """Get agent-wise collection report.
+
+    Args:
+        start_date: Optional start date in DD-MM-YYYY format
+        end_date: Optional end date in DD-MM-YYYY format
 
     Returns:
         Agent collection summary.
     """
-    logger.info("Getting agent collection report")
-    return await api_client.get("agent_collection_report")
+    logger.info("Getting agent collection report for dates: %s to %s", start_date, end_date)
+    params = {}
+    if start_date:
+        params["start_date"] = start_date
+    if end_date:
+        params["end_date"] = end_date
+    return await api_client.get("agent_collection_report", params=params)
 
 
 async def get_income_summary(month: str | None = None, year: str | None = None) -> dict:

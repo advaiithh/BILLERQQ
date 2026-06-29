@@ -82,7 +82,7 @@
         } else if (event.data && event.data.type === 'toggle-chat') {
             if (event.data.open) {
                 container.style.width = '450px';
-                container.style.height = '750px';
+                container.style.height = 'calc(100vh - 20px)';
             } else {
                 container.style.width = '120px';
                 container.style.height = '120px';
