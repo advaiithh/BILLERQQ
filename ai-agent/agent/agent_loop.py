@@ -652,6 +652,10 @@ class BillerQAgent:
             elif agent_col_match:
                 raw_agent_name = agent_col_match.group(1).strip()
                 agent_name = re.sub(r"\b(report|of|for|by|agent)\b", "", raw_agent_name.lower()).strip()
+                # Strip trailing date/time phrases like "in this month", "this year", "last year", etc.
+                agent_name = re.sub(r"\s*(in\s+)?(this|last|previous|next)\s+(month|year|week).*$", "", agent_name).strip()
+                agent_name = re.sub(r"\s*(in\s+)?(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec).*$", "", agent_name).strip()
+                agent_name = re.sub(r"\s*(in\s+)?(2024|2025|2026|2027).*$", "", agent_name).strip()
                 if not agent_name or agent_name == "all":
                     agent_name = None
                 
@@ -949,7 +953,8 @@ class BillerQAgent:
                                 pkgs = await self._execute_tool("get_packages", {}, billerq_token, billerq_api_url, billerq_user_role)
                                 pkg_list = unpack_list(pkgs)
                                 for pkg in pkg_list:
-                                    if isinstance(pkg, dict) and (name_search == str(pkg.get("name", "")).lower() or name_search in str(pkg.get("name", "")).lower()):
+                                    pkg_name_lower = str(pkg.get("name", "")).lower()
+                                    if isinstance(pkg, dict) and (re.sub(r'\s+', '', name_search) == re.sub(r'\s+', '', pkg_name_lower) or re.sub(r'\s+', '', name_search) in re.sub(r'\s+', '', pkg_name_lower)):
                                         rule_based_response = (
                                             f"Package Details for '{pkg.get('name')}':\n"
                                             f"• HSN/SAC: {pkg.get('hsn_no', 'N/A')}\n"
@@ -969,7 +974,8 @@ class BillerQAgent:
                                 addon_list = unpack_list(addons)
                                 for addon in addon_list:
                                     title = addon.get("title") or addon.get("name") or ""
-                                    if isinstance(addon, dict) and (name_search == str(title).lower() or name_search in str(title).lower()):
+                                    title_lower = str(title).lower()
+                                    if isinstance(addon, dict) and (re.sub(r'\s+', '', name_search) == re.sub(r'\s+', '', title_lower) or re.sub(r'\s+', '', name_search) in re.sub(r'\s+', '', title_lower)):
                                         rule_based_response = (
                                             f"Add-on Details for '{title}':\n"
                                             f"• Connection Type: {addon.get('connection_type', 'N/A').upper()}\n"
@@ -986,7 +992,8 @@ class BillerQAgent:
                                 items_resp = await self._execute_tool("get_items", {}, billerq_token, billerq_api_url, billerq_user_role)
                                 item_list = unpack_list(items_resp)
                                 for item in item_list:
-                                    if isinstance(item, dict) and (name_search == str(item.get("name", "")).lower() or name_search in str(item.get("name", "")).lower()):
+                                    item_name_lower = str(item.get("name", "")).lower()
+                                    if isinstance(item, dict) and (re.sub(r'\s+', '', name_search) == re.sub(r'\s+', '', item_name_lower) or re.sub(r'\s+', '', name_search) in re.sub(r'\s+', '', item_name_lower)):
                                         rule_based_response = (
                                             f"Item Details for '{item.get('name')}':\n"
                                             f"• Price: ₹{item.get('price', '0.00')}\n"
@@ -1018,16 +1025,19 @@ class BillerQAgent:
                     matched_user = None
                     agent_query = str(customer_name_query).lower().strip()
                     agent_query = re.sub(r"\b(report|of|for|by|agent)\b", "", agent_query).strip()
+                    agent_query_norm = re.sub(r'\s+', '', agent_query)
                     
                     for u in users_list:
                         u_name = str(u.get("user_name", "")).lower()
-                        if agent_query == u_name:
+                        u_name_norm = re.sub(r'\s+', '', u_name)
+                        if agent_query_norm == u_name_norm:
                             matched_user = u
                             break
                     if not matched_user:
                         for u in users_list:
                             u_name = str(u.get("user_name", "")).lower()
-                            if agent_query in u_name or u_name in agent_query:
+                            u_name_norm = re.sub(r'\s+', '', u_name)
+                            if agent_query_norm in u_name_norm or u_name_norm in agent_query_norm:
                                 matched_user = u
                                 break
                     if matched_user:
@@ -1259,12 +1269,15 @@ class BillerQAgent:
                     filter_name = resolved_cust_name or customer_name_query
                     if filter_name:
                         filter_name_lower = str(filter_name).lower().strip()
+                        filter_name_norm = re.sub(r'\s+', '', filter_name_lower)
                         is_digit = filter_name_lower.isdigit()
                         filtered = []
                         for item in items:
                             cust_val = str(item.get("customer_name") or item.get("customer") or "").lower()
                             sub_val = str(item.get("subscriber_id") or "").lower()
-                            if filter_name_lower in cust_val or filter_name_lower in sub_val:
+                            cust_norm = re.sub(r'\s+', '', cust_val)
+                            sub_norm = re.sub(r'\s+', '', sub_val)
+                            if filter_name_norm in cust_norm or filter_name_norm in sub_norm:
                                 filtered.append(item)
                             elif is_digit and filter_name_lower in str(item.get("id", "")):
                                 filtered.append(item)
@@ -1943,9 +1956,12 @@ class BillerQAgent:
                     if filter_agent_lower:
                         filtered_list = []
                         filtered_total = 0.0
+                        # Normalize by removing all spaces so "archana u m" matches "archana um"
+                        filter_norm = re.sub(r'\s+', '', filter_agent_lower)
                         for item in payments_list:
                             item_agent = str(item.get("account_name", "")).lower()
-                            if filter_agent_lower in item_agent or item_agent in filter_agent_lower:
+                            item_norm = re.sub(r'\s+', '', item_agent)
+                            if filter_norm in item_norm or item_norm in filter_norm:
                                 filtered_list.append(item)
                                 try:
                                     filtered_total += float(str(item.get("collected_amount", 0)).replace(",", "").strip())
@@ -2802,13 +2818,17 @@ class BillerQAgent:
         # Local pre-filtering by customer, problem type, area
         if customer_name_filter:
             cust_lower = str(customer_name_filter).lower().strip()
+            cust_norm = re.sub(r'\s+', '', cust_lower)
             is_digit = cust_lower.isdigit()
             filtered = []
             for item in items:
                 cname_val = str(item.get("customer_name") or item.get("name") or "").lower()
                 sub_val = str(item.get("subscriber_id") or "").lower()
                 phone_val = str(item.get("phone") or "").lower()
-                if cust_lower in cname_val or cust_lower in sub_val or cust_lower in phone_val:
+                cname_norm = re.sub(r'\s+', '', cname_val)
+                sub_norm = re.sub(r'\s+', '', sub_val)
+                phone_norm = re.sub(r'\s+', '', phone_val)
+                if cust_norm in cname_norm or cust_norm in sub_norm or cust_norm in phone_norm:
                     filtered.append(item)
                 elif is_digit and cust_lower in str(item.get("id", "")):
                     filtered.append(item)
@@ -2820,7 +2840,8 @@ class BillerQAgent:
 
         if area_filter:
             area_lower = str(area_filter).lower().strip()
-            items = [item for item in items if area_lower in str(item.get("area_name", "")).lower()]
+            area_norm = re.sub(r'\s+', '', area_lower)
+            items = [item for item in items if area_norm in re.sub(r'\s+', '', str(item.get("area_name", "")).lower())]
 
         # If filtered by customer/problem/area, recompute counts locally from this filtered subset
         if customer_name_filter or problem_type_filter or area_filter:
