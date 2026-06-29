@@ -892,6 +892,134 @@
             transition: opacity 0.2s, transform 0.15s;
         }
         .guide-try-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+
+        /* ============================================================
+           Clear Button
+           ============================================================ */
+        .clear-btn {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(229, 49, 112, 0.12);
+            border: 1px solid rgba(229, 49, 112, 0.25);
+            color: var(--error);
+            font-family: var(--font);
+            font-size: 11.5px;
+            font-weight: 600;
+            padding: 5px 11px;
+            border-radius: 20px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s;
+            white-space: nowrap;
+            margin-left: 8px;
+        }
+        .clear-btn:hover {
+            background: rgba(229, 49, 112, 0.25);
+            border-color: rgba(229, 49, 112, 0.5);
+            transform: translateY(-1px);
+        }
+        .clear-btn svg {
+            width: 13px;
+            height: 13px;
+            fill: currentColor;
+            flex-shrink: 0;
+        }
+        
+        /* ============================================================
+           Copy Button
+           ============================================================ */
+        .copy-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            font-family: var(--font);
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: var(--transition);
+        }
+        .copy-btn:hover {
+            color: var(--primary-light) !important;
+            background: rgba(255, 255, 255, 0.06);
+        }
+        .copy-btn:active {
+            transform: scale(0.95);
+        }
+        .copy-btn svg {
+            width: 11px;
+            height: 11px;
+            fill: currentColor;
+        }
+
+        /* ============================================================
+           Input Clear Button (X inside input wrapper)
+           ============================================================ */
+        .input-clear-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: none; /* Toggled via JS */
+            align-items: center;
+            justify-content: center;
+            padding: 4px;
+            margin-right: 4px;
+            border-radius: 50%;
+            transition: var(--transition);
+        }
+        .input-clear-btn:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.08);
+        }
+        .input-clear-btn svg {
+            width: 14px;
+            height: 14px;
+            fill: currentColor;
+        }
+
+        /* ============================================================
+           Scroll to Bottom Indicator
+           ============================================================ */
+        #scroll-bottom-btn {
+            position: absolute;
+            bottom: 96px;
+            right: 20px;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--primary-light);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 99;
+            opacity: 0;
+            transform: scale(0.8);
+            pointer-events: none;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        #scroll-bottom-btn.visible {
+            opacity: 1;
+            transform: scale(1);
+            pointer-events: all;
+        }
+        #scroll-bottom-btn:hover {
+            background: var(--bg-input);
+            color: #fff;
+        }
+        #scroll-bottom-btn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
     </style>
 </head>
 <body>
@@ -923,6 +1051,10 @@
             <button class="guide-btn" id="guidBtn" title="Open BillerQ Guide">
                 <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
                 Guide
+            </button>
+            <button class="clear-btn" id="clearChatBtn" title="Clear Chat History">
+                <svg viewBox="0 0 24 24"><path d="M16 9v10H8V9h8m-1.5-6h-5l-1 1H5v2h14V4h-3.5l-1-1zM18 7H6v12c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7z"/></svg>
+                Clear
             </button>
         </div>
 
@@ -1030,6 +1162,11 @@
             <button class="quick-action-btn" data-query="Show package report">📦 Package Report</button>
         </div>
 
+        <!-- Scroll to Bottom Button -->
+        <button id="scroll-bottom-btn" title="Scroll to bottom" type="button">
+            <svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+        </button>
+
         <!-- Input -->
         <div class="chat-input-area">
             <div class="chat-input-wrapper">
@@ -1044,6 +1181,10 @@
                     placeholder="Ask me anything about BillerQ..."
                     autocomplete="off"
                 >
+                <button class="input-clear-btn" id="inputClearBtn" type="button" aria-label="Clear input">
+                    <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
+                <span id="charCount" style="color:var(--text-muted); font-size:10px; margin-right:8px; display:none; white-space:nowrap;">0/1000</span>
                 <button class="send-btn" id="sendBtn" disabled aria-label="Send message">
                     <svg viewBox="0 0 24 24">
                         <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
@@ -1207,6 +1348,10 @@
         const sendBtn = document.getElementById('sendBtn');
         const quickActions = document.getElementById('quickActions');
         const micBtn = document.getElementById('micBtn');
+        const clearChatBtn = document.getElementById('clearChatBtn');
+        const inputClearBtn = document.getElementById('inputClearBtn');
+        const charCount = document.getElementById('charCount');
+        const scrollBottomBtn = document.getElementById('scroll-bottom-btn');
 
         let isOpen = false;
         let isLoading = false;
@@ -1291,24 +1436,110 @@
         });
 
         // ============================================================
-        // Input Handling
+        // Clear Chat History
+        // ============================================================
+        if (clearChatBtn) {
+            clearChatBtn.addEventListener('click', () => {
+                if (confirm('Are you sure you want to clear the chat conversation?')) {
+                    // Reset backend session by generating a new session ID
+                    sessionId = generateId();
+                    localStorage.setItem('billerq_session_id', sessionId);
+                    
+                    // Clear messages container
+                    chatMessages.innerHTML = `
+                        <div class="welcome-message">
+                            <div class="welcome-emoji">👋</div>
+                            <div class="welcome-title">Hi there!</div>
+                            <div class="welcome-subtitle">
+                                I'm your BillerQ AI assistant. Ask me about customers, payments, subscriptions, or reports.
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Restore quick actions
+                    if (quickActions) {
+                        quickActions.style.display = 'flex';
+                    }
+                    
+                    // Reset input
+                    if (chatInput) {
+                        chatInput.value = '';
+                        if (inputClearBtn) inputClearBtn.style.display = 'none';
+                        if (charCount) charCount.style.display = 'none';
+                        if (sendBtn) sendBtn.disabled = true;
+                    }
+                    
+                    scrollToBottom();
+                }
+            });
+        }
+
+        // ============================================================
+        // Input Handling & Character Counter
         // ============================================================
         chatInput.addEventListener('input', () => {
-            sendBtn.disabled = !chatInput.value.trim() || isLoading;
+            const val = chatInput.value;
+            sendBtn.disabled = !val.trim() || isLoading;
+            
+            // Toggle input clear button visibility
+            if (inputClearBtn) {
+                inputClearBtn.style.display = val.length > 0 ? 'inline-flex' : 'none';
+            }
+            
+            // Character count check
+            if (charCount) {
+                charCount.textContent = `${val.length}/1000`;
+                charCount.style.display = val.length > 0 ? 'inline' : 'none';
+                if (val.length > 1000) {
+                    charCount.style.color = 'var(--error)';
+                    sendBtn.disabled = true;
+                } else {
+                    charCount.style.color = 'var(--text-muted)';
+                }
+            }
         });
 
+        if (inputClearBtn) {
+            inputClearBtn.addEventListener('click', () => {
+                chatInput.value = '';
+                inputClearBtn.style.display = 'none';
+                if (charCount) charCount.style.display = 'none';
+                sendBtn.disabled = true;
+                chatInput.focus();
+            });
+        }
+
         chatInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey && chatInput.value.trim() && !isLoading) {
+            if (e.key === 'Enter' && !e.shiftKey && chatInput.value.trim() && !isLoading && chatInput.value.length <= 1000) {
                 e.preventDefault();
                 sendMessage(chatInput.value.trim());
             }
         });
 
         sendBtn.addEventListener('click', () => {
-            if (chatInput.value.trim() && !isLoading) {
+            if (chatInput.value.trim() && !isLoading && chatInput.value.length <= 1000) {
                 sendMessage(chatInput.value.trim());
             }
         });
+
+        // ============================================================
+        // Scroll to Bottom Controls
+        // ============================================================
+        if (chatMessages && scrollBottomBtn) {
+            chatMessages.addEventListener('scroll', () => {
+                const threshold = 150;
+                const distanceToBottom = chatMessages.scrollHeight - chatMessages.clientHeight - chatMessages.scrollTop;
+                if (distanceToBottom > threshold) {
+                    scrollBottomBtn.classList.add('visible');
+                } else {
+                    scrollBottomBtn.classList.remove('visible');
+                }
+            });
+            
+            scrollBottomBtn.addEventListener('click', () => {
+                scrollToBottom();
+            });
+        }
 
         // ============================================================
         // Quick Action Buttons
@@ -1408,9 +1639,38 @@
                     <div class="bot-avatar">🤖</div>
                     <div class="message-content">
                         <div class="message-bubble">${escapeHtml(text)}</div>
-                        <div class="message-time">${timeStr}</div>
+                        <div class="message-time">
+                            ${timeStr}
+                            <button class="copy-btn" title="Copy response text" type="button">
+                                <svg viewBox="0 0 24 24">
+                                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                </svg>
+                                Copy
+                            </button>
+                        </div>
                     </div>
                 `;
+
+                // Add copy event handler
+                const copyBtn = messageDiv.querySelector('.copy-btn');
+                if (copyBtn) {
+                    copyBtn.addEventListener('click', () => {
+                        navigator.clipboard.writeText(text).then(() => {
+                            const originalHTML = copyBtn.innerHTML;
+                            copyBtn.innerHTML = `
+                                <svg viewBox="0 0 24 24" style="fill: #2ecc71;">
+                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                                Copied!
+                            `;
+                            setTimeout(() => {
+                                copyBtn.innerHTML = originalHTML;
+                            }, 2000);
+                        }).catch(err => {
+                            console.error('Failed to copy text: ', err);
+                        });
+                    });
+                }
 
                 // If the bot provided redirect metadata, render a button/link
                 if (metadata && metadata.redirect_url) {
@@ -1652,11 +1912,29 @@
             escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 
             // Inline code: `code` -> <code>code</code>
-            escaped = escaped.replace(/`(.*?)`/g, '<code style="background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; color: var(--primary-light);">$1</code>');
+            escaped = escaped.replace(/`(.*?)`/g, '<code style="background: rgba(255, 255, 255, 0.08); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; color: var(--primary-light);">$1</code>');
+
+            // Replace sub-bullet characters/points starting with '-'
+            escaped = escaped.replace(/(?:^|<br>)\s*-\s+([^<\n]+)/g, (match, content) => {
+                return `<br><span style="display: inline-flex; align-items: flex-start; gap: 8px; margin-left: 24px; font-size: 13px; color: var(--text-secondary);"><span style="color: var(--text-muted);">—</span><span>${content}</span></span>`;
+            });
 
             // Replace bullet characters/points at the start of a line with styled lists
             escaped = escaped.replace(/(?:^|<br>)\s*•\s+([^<\n]+)/g, (match, content) => {
                 return `<br><span style="display: inline-flex; align-items: flex-start; gap: 8px; margin-left: 8px;"><span style="color: var(--primary-light);">•</span><span>${content}</span></span>`;
+            });
+
+            // Status badges styling
+            escaped = escaped.replace(/\b(ACTIVE|PAID|RESOLVED|OPEN|CLOSED|IN PROGRESS|INACTIVE|OVERDUE|PENDING)\b/g, (match) => {
+                let style = 'padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; display: inline-block; text-transform: uppercase; line-height: 1;';
+                if (['ACTIVE', 'PAID', 'RESOLVED', 'OPEN'].includes(match)) {
+                    style += ' background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.3);';
+                } else if (['INACTIVE', 'OVERDUE', 'CLOSED'].includes(match)) {
+                    style += ' background: rgba(231, 76, 60, 0.15); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.3);';
+                } else {
+                    style += ' background: rgba(241, 196, 15, 0.15); color: #f1c40f; border: 1px solid rgba(241, 196, 15, 0.3);';
+                }
+                return `<span style="${style}">${match}</span>`;
             });
 
             // Convert raw newlines to break tags

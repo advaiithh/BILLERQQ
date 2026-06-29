@@ -227,18 +227,38 @@ Today's Date: {current_date}
 ## Strict Formatting Rules:
 1. If the API result contains a list of records (such as unpaid customers, recent payments, overdues, complaints, reports):
    - **Show the total first**: Show the total amount or total count clearly first. E.g. "Total unpaid amount: **₹50,000**" or "Total active customers: **1,771**".
-   - **Show total count of people**: State how many people or records exist in total. E.g. "There are **22** unpaid customers in total."
-   - **Show top 5 people/records**: Present the details of only the top 5 records. Use clean bullet points (•). **Format each record using clean, standardized key-value labels separated by a vertical bar (|)**. E.g.:
-     • **Name:** [Name] (Sub ID: **[SubID]**) | **Invoice:** [InvNo] | **Amount:** **₹[Amt]** | **Date:** **[Date]** | **Method:** **[Method]**
-     • **Name:** [Name] (Sub ID: **[SubID]**) | **Invoice:** [InvNo] | **Amount:** **₹[Amt]** | **Date:** **[Date]**
-     • **Name:** [Name] (Sub ID: **[SubID]**) | **Area:** [Area] | **Dues:** **₹[Amt]**
-     • **Date:** [Date] | **Mobile:** [Mobile] | **Status:** [Status] | **Message:** [Message]
+   - **Show top 5 people/records**: Present the details of only the top 5 records. Use clean bullet points (•). **DO NOT use vertical bars (|) or write details on a single line**. Instead, format each record on separate lines using nested sub-bullets (starting with a dash and space: -) for the details. E.g.:
+     • **[Customer Name]** (Sub ID: **[SubID]**)
+       - **Status:** [ACTIVE/INACTIVE]
+       - **Mobile:** [Mobile]
+       - **Area:** [Area]
+     • **Payment from [Customer Name]** (Sub ID: **[SubID]**)
+       - **Invoice:** [InvNo]
+       - **Amount:** **₹[Amt]**
+       - **Method:** **[Method]**
+       - **Date:** **[Date]**
+     • **Complaint #[ID]** — **[Customer Name]**
+       - **Status:** [OPEN/IN PROGRESS/RESOLVED]
+       - **Problem Type:** [Problem Type]
+       - **Date:** [Date]
    - **Direct user to click below for remaining**: For the remaining records, write "For the remaining, click the link below." or similar text. Do not list any more.
 2. If the user query is about a specific customer:
-   - Sort out their details cleanly (Name, Status, Mobile, Area, Subscription, Balance) and display them in a professional, well-spaced list using bolding and standardized labels.
-3. If the user query is about previous month data:
-   - Today is in June 2026. The previous month is May 2026. Prioritize filtering or summarizing data specifically for May 2026.
-4. Use markdown bolding (**value**) strategically to highlight key metrics, amounts, counts, customer names, status values, dates, and methods. Use clean bullet points (•), standardized key-value labels, and emojis (e.g., 📊, 💰, 💳, 👥, ⚠️, 📉) to structure sections and make them extremely easy to read. Avoid headers (like # or ##) or markdown code fences.
+   - Display their profile details using next-next lines with nested sub-bullets:
+     👤 **Customer Profile: [Customer Name]**
+     - **Subscriber ID:** **[SubID]**
+     - **Status:** [ACTIVE/INACTIVE]
+     - **Mobile:** [Mobile]
+     - **Area:** [Area]
+     - **Address:** [Address]
+     - **Joined:** [Date]
+3. If the user query is about status counts or active items, or if status summary metrics are available:
+   - First show the active items list in a highlighted way.
+   - Under that, show a standard metrics summary block:
+     📊 **Summary Metrics:**
+     - **Active [Items]:** [Count] 🟢
+     - **Total [Items]:** [Count]
+     - **Inactive/Archived [Items]:** [Count] 🔴
+4. Use markdown bolding (**value**) strategically to highlight key metrics, amounts, counts, customer names, status values, dates, and methods. Use clean bullet points (•), nested sub-bullets (-), and emojis (e.g., 📊, 💰, 💳, 👥, ⚠️, 📉) to structure sections and make them extremely easy to read. Avoid headers (like # or ##) or markdown code fences.
 5. Use ₹ symbol for Indian Rupee currency values.
 6. Keep the tone friendly, helpful, and professional. Do not reference raw IDs, API keys, or technical jargon.
 7. If no tool was run or the result is an error, answer the user's query directly or explain the error helpfully in conversational language.
@@ -846,24 +866,8 @@ class BillerQAgent:
 
                 # 1. get_customer_status_count
                 elif tool_name == "get_customer_status_count":
-                    data = tool_result.get("data")
-                    if isinstance(data, list):
-                        active_count = next((c.get("count") for c in data if c.get("status") == "Active"), None)
-                        inactive_count = next((c.get("count") for c in data if c.get("status") == "Inactive"), None)
-                        total_count = next((c.get("count") for c in data if c.get("status") == "Total"), None)
-                        if "inactive" in msg_lower:
-                            if inactive_count is not None:
-                                rule_based_response = f"Total inactive customers: **{inactive_count:,}**"
-                                if total_count is not None:
-                                    rule_based_response += f" (out of **{total_count:,}** total customers)."
-                        elif "total" in msg_lower or "overall" in msg_lower:
-                            if total_count is not None:
-                                rule_based_response = f"Total customers: **{total_count:,}**"
-                                if active_count is not None:
-                                    rule_based_response += f" (Active: **{active_count:,}**, Inactive: **{inactive_count or 0:,}**)."
-                        else:
-                            if active_count is not None:
-                                rule_based_response = f"Total active customers: **{active_count:,}** (out of **{total_count or active_count:,}** total customers)."
+                    status_f = "inactive" if "inactive" in msg_lower else "archived" if "archived" in msg_lower else "active"
+                    rule_based_response = await self._get_customer_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_f)
 
                 # 2. get_connection_data
                 elif tool_name == "get_connection_data":
@@ -958,7 +962,7 @@ class BillerQAgent:
                             sub_id = item.get("subscriber_id") or "N/A"
                             bal = item.get("order_balance") or "0.00"
                             area = item.get("area_name") or "N/A"
-                            lines.append(f"• **{cname.strip()}** (Sub ID: **{sub_id}**) in **{area}**: **₹{bal}** due")
+                            lines.append(f"• **{cname.strip()}** (Sub ID: **{sub_id}**)\n  - **Dues:** **₹{bal}**\n  - **Area:** {area}")
                         if total_count > 5:
                             lines.append("\nFor the remaining, click the link below.")
                         rule_based_response = "\n".join(lines)
@@ -989,7 +993,7 @@ class BillerQAgent:
                             date = item.get("payment_date") or item.get("created_at") or "N/A"
                             method = item.get("payment_method") or item.get("method") or "N/A"
                             inv = item.get("invoice_no") or "N/A"
-                            lines.append(f"• **Name:** {cname} (Sub ID: **{sub_id}**) | **Invoice:** {inv} | **Amount:** **₹{amount}** | **Method:** **{method}** | **Date:** **{date}**")
+                            lines.append(f"• **{cname}** (Sub ID: **{sub_id}**)\n  - **Invoice:** {inv}\n  - **Amount:** **₹{amount}**\n  - **Method:** **{method}**\n  - **Date:** **{date}**")
                         if total > 5:
                             lines.append("\nFor the remaining, click the link below.")
                         rule_based_response = "\n".join(lines)
@@ -1037,7 +1041,7 @@ class BillerQAgent:
                                     cname = c.get("customer_name") or c.get("name") or "Unknown Customer"
                                     area = c.get("area_name") or c.get("billing_area") or c.get("area") or "N/A"
                                     balance = c.get("dues") or c.get("balance") or c.get("unpaid_amount") or 0
-                                    lines.append(f"• **{cname.strip()}** ({area}): **₹{format_curr(balance)}** unpaid")
+                                    lines.append(f"• **{cname.strip()}**\n  - **Unpaid Balance:** **₹{format_curr(balance)}**\n  - **Area:** {area}")
                                 if len(customers) > 5:
                                     lines.append("\nFor the remaining, click the link below.")
                                 rule_based_response = "\n".join(lines)
@@ -1059,74 +1063,20 @@ class BillerQAgent:
                                 cname = item.get("name") or "Unknown"
                                 date = item.get("next_followup_date") or item.get("next_followup") or "N/A"
                                 assigned = item.get("assigned_to") or "Unassigned"
-                                lines.append(f"• {cname}: Next Follow-up on {date} (Assigned to: {assigned})")
+                                lines.append(f"• **{cname}**\n  - **Next Follow-up:** {date}\n  - **Assigned to:** {assigned}")
                             if count > 5:
                                 lines.append("\nFor the remaining, click the link below.")
                             rule_based_response = "\n".join(lines)
 
                 # 6. complaint_status_count
                 elif tool_name == "complaint_status_count":
-                    data = tool_result.get("data")
-                    if isinstance(data, list):
-                        lines = ["Complaint Status Counts:"]
-                        for item in data:
-                            status = item.get("status")
-                            count = item.get("count")
-                            lines.append(f"• {status}: {count}")
-                        rule_based_response = "\n".join(lines)
+                    status_f = "open" if "open" in msg_lower else "in progress" if "progress" in msg_lower else "closed" if ("closed" in msg_lower or "resolved" in msg_lower) else None
+                    rule_based_response = await self._get_complaints_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_f)
 
                 # 7. get_complaints
                 elif tool_name == "get_complaints":
-                    data_wrapper = tool_result.get("data", {})
-                    items = []
-                    total = 0
-                    if isinstance(data_wrapper, dict):
-                        items = data_wrapper.get("data", [])
-                        total = data_wrapper.get("total") or len(items)
-                    elif isinstance(data_wrapper, list):
-                        items = data_wrapper
-                        total = len(items)
-                        
-                    # Double-safety status filter client-side fallback
-                    status_filter = tool_args.get("status")
-                    if status_filter:
-                        items = [item for item in items if str(item.get("status", "")).lower() == status_filter.lower()]
-                        try:
-                            counts_resp = await self._execute_tool("get_complaint_status_count", {}, billerq_token, billerq_api_url, billerq_user_role)
-                            counts_list = counts_resp.get("data", []) if isinstance(counts_resp, dict) else []
-                            status_map = {str(item.get("status", "")).lower(): item.get("count", 0) for item in counts_list if isinstance(item, dict)}
-                            key = status_filter.lower()
-                            if key == "open":
-                                total = status_map.get("open", 91)
-                            elif key in ("in progress", "in_progress"):
-                                total = status_map.get("in progress", 34)
-                            elif key in ("closed", "resolved"):
-                                total = status_map.get("closed", 61)
-                            else:
-                                total = status_map.get(key, len(items))
-                        except Exception:
-                            logger.exception("Failed to query status counts for total complaints override")
-                            total = len(items)
-                    else:
-                        try:
-                            counts_resp = await self._execute_tool("get_complaint_status_count", {}, billerq_token, billerq_api_url, billerq_user_role)
-                            counts_list = counts_resp.get("data", []) if isinstance(counts_resp, dict) else []
-                            total = sum(item.get("count", 0) for item in counts_list if isinstance(item, dict))
-                        except Exception:
-                            pass
-                        
-                    if not items:
-                        rule_based_response = "No complaints found in the system."
-                    else:
-                        lines = [f"Total complaints: {total}", "\nHere are the top 5 complaints:"]
-                        for item in items[:5]:
-                            ptype = item.get("problem_type") or "General"
-                            status = item.get("status") or "open"
-                            date = item.get("start_date") or item.get("created_at") or "N/A"
-                            lines.append(f"• Complaint #{item.get('complaint_no', item.get('id'))}: Type: {ptype}, Status: {status}, Date: {date}")
-                        if total > 5:
-                            lines.append("\nFor the remaining, click the link below.")
-                        rule_based_response = "\n".join(lines)
+                    status_f = tool_args.get("status") or ("open" if "open" in msg_lower else "in progress" if "progress" in msg_lower else "closed" if ("closed" in msg_lower or "resolved" in msg_lower) else None)
+                    rule_based_response = await self._get_complaints_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_f)
 
                 # 8. get_dashboard_data
                 elif tool_name == "get_dashboard_data":
@@ -1148,27 +1098,27 @@ class BillerQAgent:
                             rule_based_response = f"Total wallet balance: ₹{pay.get('wallet_amount', '0.00')}"
                         else:
                             lines = [
-                                "Dashboard Overview:",
-                                f"• Total Customers: {cond.get('customers', 0):,}",
-                                f"• Active STBs: {cond.get('stb', 0):,}",
-                                f"• Active Packages: {cond.get('packages', 0):,}",
+                                "📊 **Dashboard Overview:**",
+                                f"- **Total Customers:** {cond.get('customers', 0):,}",
+                                f"- **Active STBs:** {cond.get('stb', 0):,} 🟢",
+                                f"- **Active Packages:** {cond.get('packages', 0):,}",
                                 "",
-                                "Payments & Collection:",
-                                f"• Collected Today: ₹{pay.get('today', '0.00')}",
-                                f"• Collected This Month: ₹{pay.get('this_month', '0.00')}",
-                                f"• Outstanding Dues: ₹{pay.get('dues', '0.00')}",
-                                f"• Wallet Amount: ₹{pay.get('wallet_amount', '0.00')}",
+                                "💰 **Payments & Collection:**",
+                                f"- **Collected Today:** ₹{pay.get('today', '0.00')}",
+                                f"- **Collected This Month:** ₹{pay.get('this_month', '0.00')}",
+                                f"- **Outstanding Dues:** ₹{pay.get('dues', '0.00')} 🔴",
+                                f"- **Wallet Amount:** ₹{pay.get('wallet_amount', '0.00')}",
                                 "",
-                                "Subscriptions Summary:",
-                                f"• Total Active Subscriptions: {subs.get('totalSubscriptions', 0)}",
-                                f"• Expired Subscriptions: {subs.get('expired', 0)}",
-                                f"• Expiring Today: {subs.get('today', 0)}",
-                                f"• Expiring in 5 Days: {subs.get('in_five_days', 0)}",
+                                "📦 **Subscriptions Summary:**",
+                                f"- **Total Active Subscriptions:** {subs.get('totalSubscriptions', 0)} 🟢",
+                                f"- **Expired Subscriptions:** {subs.get('expired', 0)} 🔴",
+                                f"- **Expiring Today:** {subs.get('today', 0)} ⚠️",
+                                f"- **Expiring in 5 Days:** {subs.get('in_five_days', 0)}",
                                 "",
-                                "Complaints Status:",
-                                f"• Unresolved Complaints: {comp.get('un_resolved', 0)}",
-                                f"• In Process: {comp.get('in_process', 0)}",
-                                f"• Resolved: {comp.get('resolved', 0)}"
+                                "🛠️ **Complaints Status:**",
+                                f"- **Unresolved Complaints:** {comp.get('un_resolved', 0)} 🔴",
+                                f"- **In Process:** {comp.get('in_process', 0)} 🟠",
+                                f"- **Resolved:** {comp.get('resolved', 0)} 🟢"
                             ]
                             rule_based_response = "\n".join(lines)
 
@@ -1183,42 +1133,43 @@ class BillerQAgent:
                         
                         requested_details = []
                         if "wallet" in msg_lower:
-                            requested_details.append(f"• Wallet Balance: **₹{wallet_val}**")
+                            requested_details.append(f"- **Wallet Balance:** **₹{wallet_val}**")
                         if "dues" in msg_lower or "balance" in msg_lower:
-                            requested_details.append(f"• Open Invoices: **₹{open_inv}**\n• Overdue Invoices: **₹{overdue}**")
+                            requested_details.append(f"- **Open Invoices:** **₹{open_inv}**\n- **Overdue Invoices:** **₹{overdue}**")
                         if any(k in msg_lower for k in ["phone", "number", "mobile", "contact"]):
-                            requested_details.append(f"• Mobile Number: **{det.get('mobile', 'N/A')}**")
+                            requested_details.append(f"- **Mobile Number:** **{det.get('mobile', 'N/A')}**")
                         if any(k in msg_lower for k in ["place", "area", "location"]):
-                            requested_details.append(f"• Area/Place: **{data.get('area', 'N/A')}**")
+                            requested_details.append(f"- **Area/Place:** **{data.get('area', 'N/A')}**")
                         if "address" in msg_lower:
-                            requested_details.append(f"• Address: **{data.get('address', 'N/A')}**")
+                            requested_details.append(f"- **Address:** **{data.get('address', 'N/A')}**")
                         if any(k in msg_lower for k in ["subscriber", "sub id", "sub_id", "customer id", "customer_id", "subscriber id"]):
-                            requested_details.append(f"• Subscriber ID: **{det.get('subscriber_id', 'N/A')}**")
+                            requested_details.append(f"- **Subscriber ID:** **{det.get('subscriber_id', 'N/A')}**")
                         if any(k in msg_lower for k in ["joined", "join date"]):
-                            requested_details.append(f"• Join Date: **{data.get('join_date', 'N/A')}**")
+                            requested_details.append(f"- **Join Date:** **{data.get('join_date', 'N/A')}**")
                         if "paid" in msg_lower:
-                            requested_details.append(f"• Total Paid Amount: **₹{data.get('paid_amount', '0.00')}**")
+                            requested_details.append(f"- **Total Paid Amount:** **₹{data.get('paid_amount', '0.00')}**")
                         if any(k in msg_lower for k in ["connection", "connections", "stb"]):
-                            requested_details.append(f"• Connections: **{data.get('connections', 0)}** ({', '.join(det.get('connections', []))})")
+                            requested_details.append(f"- **Connections:** **{data.get('connections', 0)}** ({', '.join(det.get('connections', []))})")
                             
                         if requested_details:
-                            rule_based_response = f"👤 **Customer Profile details for {resolved_cust_name.title()}:**\n" + "\n".join(requested_details)
+                            rule_based_response = f"👤 **Customer Profile for {resolved_cust_name.title()}:**\n" + "\n".join(requested_details)
                         else:
+                            status_str = "ACTIVE" if int(data.get("connections", 0)) > 0 else "INACTIVE"
                             lines = [
-                                f"Customer Profile: {data.get('customer_name', resolved_cust_name).title()}",
-                                f"• Subscriber ID: {det.get('subscriber_id', 'N/A')}",
-                                f"• Status: Active" if int(data.get("connections", 0)) > 0 else f"• Status: Inactive",
-                                f"• Mobile: {det.get('mobile', 'N/A')}",
-                                f"• Area: {data.get('area', 'N/A')}",
-                                f"• Joined: {data.get('join_date', 'N/A')}",
-                                f"• Address: {data.get('address', 'N/A')}",
+                                f"👤 **Customer Profile: {data.get('customer_name', resolved_cust_name).title()}**",
+                                f"- **Subscriber ID:** **{det.get('subscriber_id', 'N/A')}**",
+                                f"- **Status:** {status_str}",
+                                f"- **Mobile:** {det.get('mobile', 'N/A')}",
+                                f"- **Area:** {data.get('area', 'N/A')}",
+                                f"- **Joined:** {data.get('join_date', 'N/A')}",
+                                f"- **Address:** {data.get('address', 'N/A')}",
                                 "",
-                                "Account Summary:",
-                                f"• Total Paid: ₹{data.get('paid_amount', '0.00')}",
-                                f"• Open Invoices: ₹{open_inv}",
-                                f"• Overdue Invoices: ₹{overdue}",
-                                f"• Wallet Balance: ₹{wallet_val}",
-                                f"• Connections: {data.get('connections', 0)} ({', '.join(det.get('connections', []))})"
+                                "💳 **Account Summary:**",
+                                f"- **Total Paid:** **₹{data.get('paid_amount', '0.00')}**",
+                                f"- **Open Invoices:** **₹{open_inv}**",
+                                f"- **Overdue Invoices:** **₹{overdue}**",
+                                f"- **Wallet Balance:** **₹{wallet_val}**",
+                                f"- **Connections:** **{data.get('connections', 0)}** ({', '.join(det.get('connections', []))})"
                             ]
                             rule_based_response = "\n".join(lines)
 
@@ -1266,7 +1217,7 @@ class BillerQAgent:
                                 status = item.get("status") or "N/A"
                                 mobile = item.get("mobile") or "N/A"
                                 area = item.get("area_name") or item.get("area") or "N/A"
-                                lines.append(f"• {name} (Sub ID: {sub_id}) — {status.upper()} | Mobile: {mobile} | Area: {area}")
+                                lines.append(f"• **{name}** (Sub ID: **{sub_id}**)\n  - **Status:** {status.upper()}\n  - **Mobile:** {mobile}\n  - **Area:** {area}")
                             if total_count > 5 or len(data) > 5:
                                 lines.append("\nFor the remaining, click the link below.")
                             rule_based_response = "\n".join(lines)
@@ -1306,84 +1257,39 @@ class BillerQAgent:
                             amount = item.get("amount") or f"₹{item.get('balance', '0.00')}"
                             date = item.get("invoice_date") or item.get("created_date") or "N/A"
                             status = item.get("payment_status") or item.get("order_status") or "N/A"
-                            lines.append(f"• **Name:** {cname} (Sub ID: **{sub_id}**) | **Invoice:** #{pref}{inv_no} | **Amount:** **{amount}** | **Status:** **{status.upper()}** | **Date:** **{date}**")
+                            lines.append(f"• **Invoice #{pref}{inv_no}** — **{cname}** (Sub ID: **{sub_id}**)\n  - **Amount:** {amount}\n  - **Status:** {status.upper()}\n  - **Date:** {date}")
                         if total > 5 or len(items) > 5:
                             lines.append("\nFor the remaining, click the link below.")
                         rule_based_response = "\n".join(lines)
 
                 # 13. get_all_customers
                 elif tool_name == "get_all_customers":
-                    c_data = tool_result.get("data", {})
-                    if isinstance(c_data, dict):
-                        customers = c_data.get("data", [])
-                        total_count = c_data.get("total", len(customers))
-                        
-                        # Double-safety status filter client-side fallback
-                        status_filter = tool_args.get("status")
-                        original_total = total_count
-                        if status_filter:
-                            customers = [c for c in customers if str(c.get("status", "")).lower() == status_filter.lower()]
-                        total_count = original_total if original_total is not None else len(customers)
-                        
-                        if customer_name_query == "latest":
-                            if not customers:
-                                rule_based_response = "No customers found in the system."
-                            else:
-                                top = customers[0]
-                                rule_based_response = (
-                                    f"Latest added customer details:\n"
-                                    f"• Name: {top.get('name', 'N/A')}\n"
-                                    f"• Subscriber ID: {top.get('subscriber_id', 'N/A')}\n"
-                                    f"• Join Date: {top.get('join_date', 'N/A')}\n"
-                                    f"• Status: {top.get('status', 'N/A').upper()}\n"
-                                    f"• Mobile: {top.get('mobile', 'N/A')}\n"
-                                    f"• Area: {top.get('area_name', 'N/A')}"
-                                )
-                        elif customer_name_query == "inactive_list" or tool_args.get("status") == "inactive":
-                            if not customers:
-                                rule_based_response = "No inactive customers found."
-                            else:
-                                lines = [
-                                    f"👥 **Total Inactive Customers:** **{total_count}**",
-                                    "\n**Here are the top inactive customers:**"
-                                ]
-                                for c in customers[:5]:
-                                    cname = c.get("name") or "Unknown"
-                                    sub_id = c.get("subscriber_id") or "N/A"
-                                    jdate = c.get("join_date") or "N/A"
-                                    lines.append(f"• **Name:** {cname} (Sub ID: **{sub_id}**) | **Joined:** **{jdate}** | **Status:** **INACTIVE**")
-                                if total_count > 5:
-                                    lines.append("\nFor the remaining, click the link below.")
-                                rule_based_response = "\n".join(lines)
-                        elif customer_name_query == "active_list" or tool_args.get("status") == "active":
-                            if not customers:
-                                rule_based_response = "No active customers found."
-                            else:
-                                lines = [
-                                    f"👥 **Total Active Customers:** **{total_count}**",
-                                    "\n**Here are the top active customers:**"
-                                ]
-                                for c in customers[:5]:
-                                    cname = c.get("name") or "Unknown"
-                                    sub_id = c.get("subscriber_id") or "N/A"
-                                    jdate = c.get("join_date") or "N/A"
-                                    lines.append(f"• **Name:** {cname} (Sub ID: **{sub_id}**) | **Joined:** **{jdate}** | **Status:** **ACTIVE**")
-                                if total_count > 5:
-                                    lines.append("\nFor the remaining, click the link below.")
-                                rule_based_response = "\n".join(lines)
+                    if customer_name_query == "latest":
+                        c_data = tool_result.get("data", {})
+                        customers = c_data.get("data", []) if isinstance(c_data, dict) else []
+                        if not customers:
+                            rule_based_response = "No customers found in the system."
                         else:
-                            lines = [
-                                f"👥 **Total Customers:** **{total_count}**",
-                                "\n**Here are the first few customers:**"
-                            ]
-                            for c in customers[:5]:
-                                cname = c.get("name") or "Unknown"
-                                sub_id = c.get("subscriber_id") or "N/A"
-                                status = c.get("status") or "N/A"
-                                lines.append(f"• **Name:** {cname} (Sub ID: **{sub_id}**) | **Status:** **{status.upper()}**")
-                            if total_count > 5:
-                                lines.append("\nFor the remaining, click the link below.")
-                            rule_based_response = "\n".join(lines)
+                            top = customers[0]
+                            rule_based_response = (
+                                f"Latest added customer details:\n"
+                                f"• **{top.get('name', 'N/A')}**\n"
+                                f"  - **Subscriber ID:** **{top.get('subscriber_id', 'N/A')}**\n"
+                                f"  - **Join Date:** {top.get('join_date', 'N/A')}\n"
+                                f"  - **Status:** {top.get('status', 'N/A').upper()}\n"
+                                f"  - **Mobile:** {top.get('mobile', 'N/A')}\n"
+                                f"  - **Area:** {top.get('area_name', 'N/A')}"
+                            )
+                    else:
+                        status_f = tool_args.get("status")
+                        if not status_f:
+                            if "inactive_list" in str(customer_name_query) or "inactive" in msg_lower:
+                                status_f = "inactive"
+                            elif "active_list" in str(customer_name_query) or "active" in msg_lower:
+                                status_f = "active"
+                            elif "archived" in msg_lower:
+                                status_f = "archived"
+                        rule_based_response = await self._get_customer_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_f)
 
                 # 14. get_income_summary
                 elif tool_name == "get_income_summary":
@@ -1450,21 +1356,7 @@ class BillerQAgent:
 
                 # 16. get_archived_customers
                 elif tool_name == "get_archived_customers":
-                    c_data = tool_result.get("data", {})
-                    items = []
-                    total = 0
-                    if isinstance(c_data, dict):
-                        items = c_data.get("data", [])
-                        total = c_data.get("total", len(items))
-                    if not items:
-                        rule_based_response = "No archived customers found."
-                    else:
-                        lines = [f"Total archived customers: {total}", "Here are the recent archived customers:"]
-                        for item in items[:5]:
-                            lines.append(f"• {item.get('name')} (Sub ID: {item.get('subscriber_id')}) — Mobile: {item.get('mobile')} | Joined: {item.get('join_date')}")
-                        if total > 5:
-                            lines.append("\nFor the remaining, click the link below.")
-                        rule_based_response = "\n".join(lines)
+                    rule_based_response = await self._get_customer_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, "archived")
 
                 # 17. get_pending_subscriptions
                 elif tool_name == "get_pending_subscriptions":
@@ -1479,7 +1371,7 @@ class BillerQAgent:
                     else:
                         lines = [f"Total pending subscriptions: {total}", "Here are the recent pending subscriptions:"]
                         for item in items[:5]:
-                            lines.append(f"• {item.get('customer_name')} (Sub ID: {item.get('subscriber_id')}) — Plan: {item.get('package_name')} | Order status: {item.get('order_status')}")
+                            lines.append(f"• **{item.get('customer_name')}** (Sub ID: **{item.get('subscriber_id')}**)\n  - **Plan:** {item.get('package_name')}\n  - **Order Status:** {item.get('order_status', '').upper()}")
                         if total > 5:
                             lines.append("\nFor the remaining, click the link below.")
                         rule_based_response = "\n".join(lines)
@@ -1497,7 +1389,7 @@ class BillerQAgent:
                     else:
                         lines = [f"Total online payments: {total}", "Here are the recent online payments:"]
                         for item in items[:5]:
-                            lines.append(f"• {item.get('customer_name')}: ₹{item.get('paid_amount')} on {item.get('paid_date')} (Invoice: {item.get('invoice_no')})")
+                            lines.append(f"• **{item.get('customer_name')}**\n  - **Amount:** **₹{item.get('paid_amount')}**\n  - **Date:** **{item.get('paid_date')}**\n  - **Invoice:** #{item.get('invoice_no')}")
                         if total > 5:
                             lines.append("\nFor the remaining, click the link below.")
                         rule_based_response = "\n".join(lines)
@@ -1510,7 +1402,7 @@ class BillerQAgent:
                     else:
                         lines = [f"Customer Payment Report Summary (Loaded {len(payment_data)} items):"]
                         for item in payment_data[:5]:
-                            lines.append(f"• {item.get('name')}: Paid ₹{item.get('paid_amount')} on {item.get('payment_date')} (Method: {item.get('payment_method')})")
+                            lines.append(f"• **{item.get('name')}**\n  - **Paid Amount:** **₹{item.get('paid_amount')}**\n  - **Date:** **{item.get('payment_date')}**\n  - **Method:** **{item.get('payment_method')}**")
                         rule_based_response = "\n".join(lines)
 
                 # 20. get_package_report
@@ -1690,76 +1582,23 @@ class BillerQAgent:
 
                 # 30. get_stb_status_count
                 elif tool_name == "get_stb_status_count":
-                    data = tool_result.get("data", [])
-                    if isinstance(data, list):
-                        lines = ["Set-Top Box Status Counts:"]
-                        for item in data:
-                            lines.append(f"• {item.get('status')}: {item.get('count')}")
-                        rule_based_response = "\n".join(lines)
-                    else:
-                        rule_based_response = "No STB status data available."
+                    status_f = "inactive" if "inactive" in msg_lower else "suspended" if "suspended" in msg_lower else "active"
+                    rule_based_response = await self._get_stb_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_f)
 
                 # 31. get_stbs
                 elif tool_name == "get_stbs":
-                    c_data = tool_result.get("data", {})
-                    items = []
-                    total = 0
-                    if isinstance(c_data, dict):
-                        items = c_data.get("data", [])
-                        total = c_data.get("total", len(items))
-                    if not items:
-                        rule_based_response = "No set-top boxes found."
-                    else:
-                        lines = [f"Total Set-Top Boxes: {total}", "Set-Top Box Listings:"]
-                        for item in items[:5]:
-                            lines.append(f"• STB No: {item.get('stb_no')} (Type: {item.get('type')}, Make: {item.get('device_make')}) — Assigned to: {item.get('customer_name') or 'Unassigned'}")
-                        if total > 5:
-                            lines.append("\nFor the remaining, click the link below.")
-                        rule_based_response = "\n".join(lines)
+                    status_f = tool_args.get("status") or ("inactive" if "inactive" in msg_lower else "suspended" if "suspended" in msg_lower else None)
+                    rule_based_response = await self._get_stb_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_f)
 
                 # 32. get_enquiries
                 elif tool_name == "get_enquiries":
-                    c_data = tool_result.get("data", {})
-                    items = []
-                    total = 0
-                    if isinstance(c_data, dict):
-                        items = c_data.get("data", [])
-                        total = c_data.get("total", len(items))
-                    if not items:
-                        rule_based_response = "No enquiries found."
-                    else:
-                        lines = [f"Total Enquiries: {total}", "Here are the recent enquiries:"]
-                        for item in items[:5]:
-                            lines.append(f"• Enquiry #{item.get('id')} — {item.get('name')}: {item.get('mobile_no')} (Created on {item.get('created_at', 'N/A')[:10]})")
-                        if total > 5:
-                            lines.append("\nFor the remaining, click the link below.")
-                        rule_based_response = "\n".join(lines)
+                    status_f = tool_args.get("status") or ("converted" if "converted" in msg_lower else "lost" if "lost" in msg_lower else None)
+                    rule_based_response = await self._get_enquiry_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_f)
 
                 # 33. get_leads
                 elif tool_name == "get_leads":
-                    c_data = tool_result.get("data", {})
-                    items = []
-                    total = 0
-                    if isinstance(c_data, dict):
-                        items = c_data.get("data", [])
-                        total = c_data.get("total", len(items))
-                    
-                    # Double-safety status/stage filter client-side fallback
-                    status_filter = tool_args.get("status") or tool_args.get("stage")
-                    original_total = total
-                    if status_filter:
-                        items = [item for item in items if str(item.get("stage", "")).lower() == status_filter.lower()]
-                    total = original_total if original_total is not None else len(items)
-                        
-                    if not items:
-                        rule_based_response = "No leads found."
-                    else:
-                        lines = [f"Total Leads: {total}", "Here are the recent leads:"]
-                        for item in items[:5]:
-                            lines.append(f"• Lead #{item.get('id')} — {item.get('name')}: {item.get('mobile_no')} (Stage: {item.get('stage')})")
-                        if total > 5:
-                            lines.append("\nFor the remaining, click the link below.")
-                        rule_based_response = "\n".join(lines)
+                    status_f = tool_args.get("status") or tool_args.get("stage") or ("converted" if "converted" in msg_lower else "lost" if "lost" in msg_lower else None)
+                    rule_based_response = await self._get_lead_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_f)
 
                 # 34. get_followups
                 elif tool_name == "get_followups":
@@ -2242,6 +2081,399 @@ class BillerQAgent:
             metadata["redirect_label"] = url_label[1]
 
         return metadata
+
+    def _format_curr(self, val):
+        try:
+            if isinstance(val, (int, float)):
+                return f"{val:,.2f}"
+            cleaned = str(val).replace(",", "").strip()
+            return f"{float(cleaned):,.2f}"
+        except Exception:
+            return str(val)
+
+    async def _get_customer_dashboard_response(self, billerq_token, billerq_api_url, billerq_user_role, status_filter=None):
+        try:
+            counts_resp = await self._execute_tool("get_customer_status_count", {}, billerq_token, billerq_api_url, billerq_user_role)
+            counts_data = counts_resp.get("data") if isinstance(counts_resp, dict) else []
+        except Exception:
+            counts_data = []
+            
+        active_count = 0
+        inactive_count = 0
+        total_count = 0
+        if isinstance(counts_data, list):
+            active_count = next((c.get("count") for c in counts_data if c.get("status") == "Active"), 0)
+            inactive_count = next((c.get("count") for c in counts_data if c.get("status") == "Inactive"), 0)
+            total_count = next((c.get("count") for c in counts_data if c.get("status") == "Total"), 0)
+
+        try:
+            archived_resp = await self._execute_tool("get_archived_customers", {}, billerq_token, billerq_api_url, billerq_user_role)
+            archived_data = archived_resp.get("data", []) if isinstance(archived_resp, dict) else []
+            archived_count = len(archived_data) if isinstance(archived_data, list) else 0
+        except Exception:
+            archived_data = []
+            archived_count = 0
+
+        target_status = status_filter if status_filter else "active"
+        lines = []
+
+        if target_status == "archived":
+            lines.append("⚠️ **ARCHIVED CUSTOMERS** (Top 5)")
+            if not archived_data:
+                lines.append("- No archived customers found.")
+            else:
+                for c in archived_data[:5]:
+                    cname = c.get("name") or c.get("customer_name") or "Unknown"
+                    sub_id = c.get("subscriber_id") or "N/A"
+                    mobile = c.get("mobile") or "N/A"
+                    jdate = c.get("join_date") or "N/A"
+                    lines.append(f"• **{cname}** (Sub ID: **{sub_id}**)\n  - **Status:** ARCHIVED\n  - **Mobile:** {mobile}\n  - **Joined:** {jdate}")
+            list_total = archived_count
+        else:
+            try:
+                cust_resp = await self._execute_tool("get_all_customers", {"status": target_status}, billerq_token, billerq_api_url, billerq_user_role)
+                cust_data = cust_resp.get("data", {}) if isinstance(cust_resp, dict) else {}
+                customers = cust_data.get("data", []) if isinstance(cust_data, dict) else []
+            except Exception:
+                customers = []
+
+            status_label = target_status.upper()
+            emoji = "🟢" if status_label == "ACTIVE" else "🔴" if status_label == "INACTIVE" else "⚠️"
+            lines.append(f"{emoji} **{status_label} CUSTOMERS** (Top 5)")
+            
+            if not customers:
+                lines.append(f"- No {target_status} customers found.")
+            else:
+                for c in customers[:5]:
+                    cname = c.get("name") or c.get("customer_name") or "Unknown"
+                    sub_id = c.get("subscriber_id") or "N/A"
+                    status = c.get("status") or target_status
+                    mobile = c.get("mobile") or "N/A"
+                    area = c.get("area_name") or c.get("area") or "N/A"
+                    lines.append(f"• **{cname}** (Sub ID: **{sub_id}**)\n  - **Status:** {status.upper()}\n  - **Mobile:** {mobile}\n  - **Area:** {area}")
+            
+            list_total = len(customers)
+            if target_status == "active" and active_count > 0:
+                list_total = active_count
+            elif target_status == "inactive" and inactive_count > 0:
+                list_total = inactive_count
+
+        if list_total > 5:
+            lines.append("\nFor the remaining, click the link below.")
+
+        lines.append("\n---")
+        lines.append("\n📊 **Customer Metrics Summary:**")
+        lines.append(f"- **Active Customers:** {active_count} 🟢")
+        lines.append(f"- **Total Customers:** {total_count}")
+        lines.append(f"- **Inactive Customers:** {inactive_count} 🔴")
+        lines.append(f"- **Archived Customers:** {archived_count} ⚠️")
+
+        return "\n".join(lines)
+
+    async def _get_complaints_dashboard_response(self, billerq_token, billerq_api_url, billerq_user_role, status_filter=None):
+        try:
+            counts_resp = await self._execute_tool("get_complaint_status_count", {}, billerq_token, billerq_api_url, billerq_user_role)
+            counts_data = counts_resp.get("data") if isinstance(counts_resp, dict) else []
+        except Exception:
+            counts_data = []
+        
+        open_count = 0
+        in_progress_count = 0
+        closed_count = 0
+        total_count = 0
+        if isinstance(counts_data, list):
+            for item in counts_data:
+                st = str(item.get("status", "")).lower()
+                cnt = item.get("count", 0)
+                if st == "open":
+                    open_count = cnt
+                elif "progress" in st:
+                    in_progress_count = cnt
+                elif st in ("closed", "resolved"):
+                    closed_count = cnt
+                elif st == "total":
+                    total_count = cnt
+        
+        if total_count == 0:
+            total_count = open_count + in_progress_count + closed_count
+
+        args = {}
+        if status_filter:
+            args["status"] = status_filter
+        else:
+            args["status"] = "open"
+            
+        try:
+            complaints_resp = await self._execute_tool("get_complaints", args, billerq_token, billerq_api_url, billerq_user_role)
+            complaints_wrapper = complaints_resp.get("data", {}) if isinstance(complaints_resp, dict) else {}
+            items = []
+            if isinstance(complaints_wrapper, dict):
+                items = complaints_wrapper.get("data", [])
+            elif isinstance(complaints_wrapper, list):
+                items = complaints_wrapper
+        except Exception:
+            items = []
+
+        target_status = status_filter.upper() if status_filter else "OPEN"
+        lines = []
+        emoji = "🟢" if target_status == "OPEN" else "🟠" if "PROGRESS" in target_status else "🔴"
+        lines.append(f"{emoji} **{target_status} COMPLAINTS** (Top 5)")
+        
+        if not items:
+            lines.append(f"- No {target_status.lower()} complaints found.")
+        else:
+            for item in items[:5]:
+                cname = item.get("customer_name") or item.get("name") or "Unknown"
+                comp_no = item.get("complaint_no") or item.get("id") or "N/A"
+                prob = item.get("problem_type") or "N/A"
+                status = item.get("status") or "N/A"
+                date = item.get("created_at") or "N/A"
+                lines.append(f"• **Complaint #{comp_no}** — **{cname}**\n  - **Status:** {status.upper()}\n  - **Problem Type:** {prob}\n  - **Date:** {date}")
+
+        list_total = len(items)
+        if target_status == "OPEN" and open_count > 0:
+            list_total = open_count
+        elif "PROGRESS" in target_status and in_progress_count > 0:
+            list_total = in_progress_count
+        elif target_status in ("CLOSED", "RESOLVED") and closed_count > 0:
+            list_total = closed_count
+
+        if list_total > 5:
+            lines.append("\nFor the remaining, click the link below.")
+
+        lines.append("\n---")
+        lines.append("\n📊 **Complaints Summary:**")
+        lines.append(f"- **Open Complaints:** {open_count} 🟢")
+        lines.append(f"- **In-Progress Complaints:** {in_progress_count} 🟠")
+        lines.append(f"- **Closed Complaints:** {closed_count} 🔴")
+        lines.append(f"- **Total Complaints:** {total_count}")
+
+        return "\n".join(lines)
+
+    async def _get_stb_dashboard_response(self, billerq_token, billerq_api_url, billerq_user_role, status_filter=None):
+        try:
+            counts_resp = await self._execute_tool("get_stb_status_count", {}, billerq_token, billerq_api_url, billerq_user_role)
+            counts_data = counts_resp.get("data") if isinstance(counts_resp, dict) else []
+        except Exception:
+            counts_data = []
+
+        active_count = 0
+        inactive_count = 0
+        suspended_count = 0
+        total_count = 0
+        if isinstance(counts_data, list):
+            for item in counts_data:
+                st = str(item.get("status", "")).lower()
+                cnt = item.get("count", 0)
+                if st == "active":
+                    active_count = cnt
+                elif st == "inactive":
+                    inactive_count = cnt
+                elif st == "suspended":
+                    suspended_count = cnt
+                elif st == "total":
+                    total_count = cnt
+
+        if total_count == 0:
+            total_count = active_count + inactive_count + suspended_count
+
+        try:
+            stb_resp = await self._execute_tool("get_stbs", {}, billerq_token, billerq_api_url, billerq_user_role)
+            stb_wrapper = stb_resp.get("data", {}) if isinstance(stb_resp, dict) else {}
+            items = []
+            if isinstance(stb_wrapper, dict):
+                items = stb_wrapper.get("data", [])
+            elif isinstance(stb_wrapper, list):
+                items = stb_wrapper
+        except Exception:
+            items = []
+
+        target_status = status_filter if status_filter else "active"
+        target_items = [i for i in items if str(i.get("status", "")).lower() == target_status.lower()]
+        if not target_items and not status_filter:
+            target_items = items
+
+        lines = []
+        status_label = target_status.upper()
+        emoji = "🟢" if status_label == "ACTIVE" else "🔴" if status_label == "INACTIVE" else "⚠️"
+        lines.append(f"{emoji} **{status_label} STBs** (Top 5)")
+
+        if not target_items:
+            lines.append(f"- No {target_status} STBs found.")
+        else:
+            for item in target_items[:5]:
+                cname = item.get("customer_name") or item.get("name") or "Unknown"
+                stb_no = item.get("stb_no") or "N/A"
+                card_no = item.get("card_no") or "N/A"
+                brand = item.get("brand") or "N/A"
+                status = item.get("status") or "N/A"
+                lines.append(f"• **STB: {stb_no}** — **{cname}**\n  - **Status:** {status.upper()}\n  - **Card No:** {card_no}\n  - **Brand:** {brand}")
+
+        list_total = len(target_items)
+        if target_status == "active" and active_count > 0:
+            list_total = active_count
+        elif target_status == "inactive" and inactive_count > 0:
+            list_total = inactive_count
+
+        if list_total > 5:
+            lines.append("\nFor the remaining, click the link below.")
+
+        lines.append("\n---")
+        lines.append("\n📊 **STB/Device Summary:**")
+        lines.append(f"- **Active STBs:** {active_count} 🟢")
+        lines.append(f"- **Inactive STBs:** {inactive_count} 🔴")
+        lines.append(f"- **Suspended STBs:** {suspended_count} ⚠️")
+        lines.append(f"- **Total STBs:** {total_count}")
+
+        return "\n".join(lines)
+
+    async def _get_enquiry_dashboard_response(self, billerq_token, billerq_api_url, billerq_user_role, status_filter=None):
+        try:
+            counts_resp = await self._execute_tool("get_enquiry_status_count", {}, billerq_token, billerq_api_url, billerq_user_role)
+            counts_data = counts_resp.get("data") if isinstance(counts_resp, dict) else []
+        except Exception:
+            counts_data = []
+        
+        active_count = 0
+        converted_count = 0
+        lost_count = 0
+        total_count = 0
+        if isinstance(counts_data, list):
+            for item in counts_data:
+                st = str(item.get("status", "")).lower()
+                cnt = item.get("count", 0)
+                if st == "active":
+                    active_count = cnt
+                elif st == "converted":
+                    converted_count = cnt
+                elif st == "lost":
+                    lost_count = cnt
+                elif st == "total":
+                    total_count = cnt
+
+        if total_count == 0:
+            total_count = active_count + converted_count + lost_count
+
+        try:
+            enq_resp = await self._execute_tool("get_enquiries", {}, billerq_token, billerq_api_url, billerq_user_role)
+            enq_wrapper = enq_resp.get("data", {}) if isinstance(enq_resp, dict) else {}
+            items = []
+            if isinstance(enq_wrapper, dict):
+                items = enq_wrapper.get("data", [])
+            elif isinstance(enq_wrapper, list):
+                items = enq_wrapper
+        except Exception:
+            items = []
+
+        target_status = status_filter if status_filter else "active"
+        target_items = [i for i in items if str(i.get("status", "")).lower() == target_status.lower()]
+        if not target_items and not status_filter:
+            target_items = items
+
+        lines = []
+        status_label = target_status.upper()
+        emoji = "🟢" if status_label == "ACTIVE" else "🟠" if status_label == "CONVERTED" else "🔴"
+        lines.append(f"{emoji} **{status_label} ENQUIRIES** (Top 5)")
+
+        if not target_items:
+            lines.append(f"- No {target_status} enquiries found.")
+        else:
+            for item in target_items[:5]:
+                name = item.get("name") or "Unknown"
+                sub = item.get("subject") or "N/A"
+                status = item.get("status") or "N/A"
+                mobile = item.get("mobile") or "N/A"
+                lines.append(f"• **{name}**\n  - **Subject:** {sub}\n  - **Status:** {status.upper()}\n  - **Mobile:** {mobile}")
+
+        list_total = len(target_items)
+        if target_status == "active" and active_count > 0:
+            list_total = active_count
+        elif target_status == "converted" and converted_count > 0:
+            list_total = converted_count
+        elif target_status == "lost" and lost_count > 0:
+            list_total = lost_count
+
+        if list_total > 5:
+            lines.append("\nFor the remaining, click the link below.")
+
+        lines.append("\n---")
+        lines.append("\n📊 **Enquiry Summary:**")
+        lines.append(f"- **Active Enquiries:** {active_count} 🟢")
+        lines.append(f"- **Converted Enquiries:** {converted_count} 🟠")
+        lines.append(f"- **Lost Enquiries:** {lost_count} 🔴")
+        lines.append(f"- **Total Enquiries:** {total_count}")
+
+        return "\n".join(lines)
+
+    async def _get_lead_dashboard_response(self, billerq_token, billerq_api_url, billerq_user_role, status_filter=None):
+        try:
+            counts_resp = await self._execute_tool("get_lead_count", {}, billerq_token, billerq_api_url, billerq_user_role)
+            counts_data = counts_resp.get("data") if isinstance(counts_resp, dict) else {}
+        except Exception:
+            counts_data = {}
+        
+        active_count = 0
+        converted_count = 0
+        lost_count = 0
+        total_count = 0
+        if isinstance(counts_data, dict):
+            active_count = counts_data.get("active", 0)
+            converted_count = counts_data.get("converted", 0)
+            lost_count = counts_data.get("lost", 0)
+            total_count = counts_data.get("total", 0)
+
+        if total_count == 0:
+            total_count = active_count + converted_count + lost_count
+
+        try:
+            lead_resp = await self._execute_tool("get_leads", {}, billerq_token, billerq_api_url, billerq_user_role)
+            lead_wrapper = lead_resp.get("data", {}) if isinstance(lead_resp, dict) else {}
+            items = []
+            if isinstance(lead_wrapper, dict):
+                items = lead_wrapper.get("data", [])
+            elif isinstance(lead_wrapper, list):
+                items = lead_wrapper
+        except Exception:
+            items = []
+
+        target_status = status_filter if status_filter else "active"
+        target_items = [i for i in items if str(i.get("status", "")).lower() == target_status.lower()]
+        if not target_items and not status_filter:
+            target_items = items
+
+        lines = []
+        status_label = target_status.upper()
+        emoji = "🟢" if status_label == "ACTIVE" else "🟠" if status_label == "CONVERTED" else "🔴"
+        lines.append(f"{emoji} **{status_label} LEADS** (Top 5)")
+
+        if not target_items:
+            lines.append(f"- No {target_status} leads found.")
+        else:
+            for item in target_items[:5]:
+                name = item.get("name") or "Unknown"
+                status = item.get("status") or "N/A"
+                mobile = item.get("mobile") or "N/A"
+                lines.append(f"• **{name}**\n  - **Status:** {status.upper()}\n  - **Mobile:** {mobile}")
+
+        list_total = len(target_items)
+        if target_status == "active" and active_count > 0:
+            list_total = active_count
+        elif target_status == "converted" and converted_count > 0:
+            list_total = converted_count
+        elif target_status == "lost" and lost_count > 0:
+            list_total = lost_count
+
+        if list_total > 5:
+            lines.append("\nFor the remaining, click the link below.")
+
+        lines.append("\n---")
+        lines.append("\n📊 **Leads Summary:**")
+        lines.append(f"- **Active Leads:** {active_count} 🟢")
+        lines.append(f"- **Converted Leads:** {converted_count} 🟠")
+        lines.append(f"- **Lost Leads:** {lost_count} 🔴")
+        lines.append(f"- **Total Leads:** {total_count}")
+
+        return "\n".join(lines)
 
     async def _execute_tool(self, name: str, arguments: dict, billerq_token: str, billerq_api_url: str = "", billerq_user_role: int | None = None) -> dict:
         """Executes the given BillerQ tool function."""

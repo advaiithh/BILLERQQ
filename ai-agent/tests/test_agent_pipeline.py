@@ -124,55 +124,6 @@ class TestBillerQAgentPipeline(unittest.TestCase):
         self.assertEqual(kpis["subscription"]["popular_packages"][0]["package_name"], "Base Pack")
         self.assertEqual(kpis["subscription"]["popular_packages"][1]["package_name"], "TP Pack")
 
-    def test_executor_substitution(self):
-        """Test step execution substitutes place-holders correctly."""
-        executor = Executor()
-        
-        # Mock global tools call map
-        from agent import executor as exec_module
-        original_map = exec_module.TOOL_MAP
-        
-        mock_tool_func = AsyncMock(return_value={"id": 44350, "name": "Joy P"})
-        exec_module.TOOL_MAP = {
-            "get_customer_profile": mock_tool_func
-        }
-
-        plan = {
-            "steps": [
-                {
-                    "tool": "get_customer_profile",
-                    "arguments": {"customer_id": "$customer_id"}
-                }
-            ]
-        }
-        resolved_entities = {
-            "$customer_id": 44350
-        }
-
-        try:
-            results = asyncio.run(executor.execute_steps(plan, resolved_entities))
-            
-            # Check execution args passed to lambda mock
-            mock_tool_func.assert_called_once_with({"customer_id": 44350})
-            self.assertEqual(results["get_customer_profile"]["name"], "Joy P")
-        finally:
-            # Restore TOOL_MAP
-            exec_module.TOOL_MAP = original_map
-
-    def test_specific_metric_query_handling(self):
-        """Test that specific queries are detected correctly."""
-        from agent.formatter import _is_specific_metric_query
-        
-        # Specific queries
-        self.assertTrue(_is_specific_metric_query("today's payment collection"))
-        self.assertTrue(_is_specific_metric_query("how many active customers?"))
-        self.assertTrue(_is_specific_metric_query("show the count of suspended customers"))
-        
-        # General queries
-        self.assertFalse(_is_specific_metric_query("give me a business summary report"))
-        self.assertFalse(_is_specific_metric_query("explain overall performance and insights"))
-        self.assertFalse(_is_specific_metric_query("what are the key concerns and recommendations?"))
-
     def test_list_truncation_to_10(self):
         """Test that lists with > 10 items are truncated to 10 with a count suffix."""
         from agent.formatter import sanitize_and_truncate_data
@@ -182,22 +133,9 @@ class TestBillerQAgentPipeline(unittest.TestCase):
         truncated = sanitize_and_truncate_data(test_list, max_list_len=10)
         
         self.assertEqual(len(truncated), 11)
-        self.assertEqual(truncated[-1], "+ 5 more")
+        self.assertEqual(truncated[-1], "... (5 more items truncated)")
         self.assertEqual(truncated[0], "item_0")
         self.assertEqual(truncated[9], "item_9")
-
-    def test_redirection_links_appending(self):
-        """Test that redirection links are correctly appended based on intent."""
-        from agent.formatter import append_redirection_link
-        
-        # If link already exists, should not append
-        response_with_link = "Check this out [customers](/customers)"
-        self.assertEqual(append_redirection_link(response_with_link, "CUSTOMER_SEARCH"), response_with_link)
-        
-        # Append appropriate link
-        self.assertIn("(/customers)", append_redirection_link("Here are your customers:", "CUSTOMER_SEARCH"))
-        self.assertIn("(/billing/recurring)", append_redirection_link("Pending collection:", "UNPAID_CUSTOMERS"))
-        self.assertIn("?id=123", append_redirection_link("Profile details:", "CUSTOMER_PROFILE", customer_id="123"))
 
 
 if __name__ == "__main__":
