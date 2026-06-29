@@ -2516,6 +2516,11 @@
                 if (copyBtn) {
                     copyBtn.addEventListener('click', () => {
                         const copyAction = () => {
+                            try {
+                                window.parent.postMessage({ type: 'copy-to-clipboard', text: text }, '*');
+                            } catch (e) {
+                                console.error("Failed to post copy message to parent:", e);
+                            }
                             if (navigator.clipboard && navigator.clipboard.writeText) {
                                 return navigator.clipboard.writeText(text);
                             }
