@@ -2426,6 +2426,21 @@ class BillerQAgent:
         if resolved_cust_name:
             metadata["customer_name"] = resolved_cust_name
 
+        # Query-based overrides for general tools (like get_dashboard_data / get_connection_data)
+        msg_lower = (message_str or "").lower()
+        if "wallet" in msg_lower:
+            metadata["redirect_url"] = "/report/wallet-balance"
+            metadata["redirect_label"] = "View wallet balance"
+            return metadata
+        elif "due" in msg_lower or "outstanding" in msg_lower:
+            metadata["redirect_url"] = "/report/payment-due"
+            metadata["redirect_label"] = "View payment due"
+            return metadata
+        elif "collection" in msg_lower or "collected" in msg_lower:
+            metadata["redirect_url"] = "/report/payment-collection"
+            metadata["redirect_label"] = "View collections"
+            return metadata
+
         if not tool_name or tool_name == "none":
             metadata["redirect_url"] = "/dashboard/default"
             metadata["redirect_label"] = "View Dashboard"
