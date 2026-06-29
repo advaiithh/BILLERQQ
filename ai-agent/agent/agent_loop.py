@@ -714,6 +714,8 @@ class BillerQAgent:
                 fast_result = {"tool": "get_all_customers", "arguments": {"page_length": 5}, "customer_name": "latest"}
             elif is_all_customers_list:
                 fast_result = {"tool": "get_all_customers", "arguments": {}, "customer_name": None}
+            elif "wallet" in msg_lower and (any(k in msg_lower for k in ["list", "each", "report", "balances", "customers", "show wallet balance", "show wallet balances"]) or msg_lower in ("wallet balance", "wallet balances")) and "total" not in msg_lower:
+                fast_result = {"tool": "get_wallet_report", "arguments": {}, "customer_name": None}
             elif any(k in msg_lower for k in ["cancelled invoice", "cancelled invoices", "cancelled order", "cancelled orders", "canceled invoice", "canceled invoices", "canceled order", "canceled orders"]):
                 fast_result = {"tool": "get_cancelled_invoices", "arguments": {}, "customer_name": None}
             elif name_extracted:
@@ -1801,9 +1803,12 @@ class BillerQAgent:
                             "Top customer wallet balances:\n"
                         ]
                         for item in wallet_list[:5]:
+                            cname = item.get("customer_name") or "Unknown"
+                            sub_id = item.get("subscriber_id") or "N/A"
+                            amt = item.get("amount") or "0.00"
                             lines.append(
-                                f"👤 **{item.get('customer_name')}**\n"
-                                f"• **Wallet Balance:** ₹{item.get('balance')} 🟢\n"
+                                f"👤 **{cname.strip()}** (ID: `{sub_id}`)\n"
+                                f"• **Wallet Balance:** ₹{amt} 🟢\n"
                             )
                         rule_based_response = "\n".join(lines)
 
