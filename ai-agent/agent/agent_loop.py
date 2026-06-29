@@ -512,17 +512,17 @@ class BillerQAgent:
                     name_extracted = candidate
 
             if not name_extracted:
-                cust_match = re.search(r"\b(?:details|profile|info|about|stb|subscription|payments?|history|invoices?|bills?|wallet|dues?|balance|phone|number|mobile|contact|complaints?|recurring)(?:\s+[a-zA-Z0-9_]+)?\s+(?:of|for)\s+([a-zA-Z0-9\s\.\-\'\u00C0-\u017F]+)", msg_lower)
+                cust_match = re.search(r"\b(details|profile|info|about|stb|subscription|payments?|history|invoices?|bills?|wallet|dues?|balance|phone|number|mobile|contact|complaints?|recurring)(?:\s+[a-zA-Z0-9_]+)?\s+(?:of|for)\s+([a-zA-Z0-9\s\.\-\'\u00C0-\u017F]+)", msg_lower)
                 if cust_match:
-                    name_extracted = cust_match.group(1).strip()
+                    name_extracted = cust_match.group(2).strip()
                 else:
-                    cust_match2 = re.search(r"\b([a-zA-Z0-9\s\.\-\'\u00C0-\u017F]+)\s+(?:wallet|dues?|balance|stb|subscription|payments?|history|invoices?|bills?|phone|number|mobile|contact|complaints?|recurring)\b", msg_lower)
+                    cust_match2 = re.search(r"\b([a-zA-Z0-9\s\.\-\'\u00C0-\u017F]+)\s+(?:details|profile|info|about|account|customer|wallet|dues?|balance|stb|subscription|payments?|history|invoices?|bills?|phone|number|mobile|contact|complaints?|recurring)\b", msg_lower)
                     if cust_match2:
                         name_extracted = cust_match2.group(1).strip()
             
             if name_extracted:
                 # 1. Remove any trailing keywords that might have been greedily captured first
-                for kw in ["wallet", "dues", "due", "balance", "stb", "subscription", "payments", "payment", "history", "invoices", "invoice", "bills", "bill", "total", "phone", "number", "mobile", "contact", "complaints", "complaint", "recurring"]:
+                for kw in ["details", "profile", "info", "about", "account", "customer", "wallet", "dues", "due", "balance", "stb", "subscription", "payments", "payment", "history", "invoices", "invoice", "bills", "bill", "total", "phone", "number", "mobile", "contact", "complaints", "complaint", "recurring"]:
                     if name_extracted.lower().endswith(" " + kw):
                         name_extracted = name_extracted[:-len(kw)-1].strip()
                     elif name_extracted.lower() == kw:
@@ -549,7 +549,7 @@ class BillerQAgent:
                 attribute_kws = ["phone", "number", "mobile", "contact", "address", "subscriber", "sub id", "sub_id", "joined", "join date", "paid", "wallet", "dues", "due", "balance", "id", "customer id", "subscriber id", "place", "area", "location"]
                 if any(k in msg_lower for k in attribute_kws):
                     # Make sure it's not a generic query like "highest dues" or "who has dues" or total collection
-                    if not any(k in msg_lower for k in ["highest", "most", "unpaid list", "active list", "inactive list", "total"]):
+                    if not any(k in msg_lower for k in ["highest", "most", "unpaid list", "active list", "inactive list", "total", "both", "subscribers", "all", "list of", "each"]):
                         name_extracted = context.get("last_customer_name")
 
             # ---- EARLY RETURN: Customer Comparison ----
@@ -678,7 +678,9 @@ class BillerQAgent:
                     "arguments": args,
                     "customer_name": agent_name
                 }
-            elif any(k in msg_lower for k in ["item list", "items list", "show items", "list items"]):
+            elif "both" in msg_lower and "subscription" in msg_lower and ("addon" in msg_lower or "add-on" in msg_lower or "add on" in msg_lower):
+                fast_result = {"tool": "get_both_subscription_addon", "arguments": {}, "customer_name": None}
+            elif any(k in msg_lower for k in ["item list", "items list", "show items", "list items", "total items", "all items", "give the total items", "give total items", "give the items", "give items"]):
                 fast_result = {"tool": "get_items", "arguments": {}, "customer_name": None}
             elif any(k in msg_lower for k in ["staff list", "show staff", "view staff", "list staff", "agent list", "agents list"]):
                 fast_result = {"tool": "get_staff", "arguments": {}, "customer_name": None}
@@ -1042,6 +1044,66 @@ class BillerQAgent:
             if tool_name and tool_name != "none":
                 if tool_name == "show_guide":
                     tool_result = {"status": "success", "category": tool_args.get("category", "billerq")}
+                elif tool_name == "get_both_subscription_addon":
+                    # Custom handler: find subscribers with both subscription and addon in a given month
+                    logger.info("Executing custom tool: get_both_subscription_addon")
+                    try:
+                        # Parse target month from query
+                        month_names_map = {
+                            "january": "January", "jan": "January",
+                            "february": "February", "feb": "February",
+                            "march": "March", "mar": "March",
+                            "april": "April", "apr": "April",
+                            "may": "May",
+                            "june": "June", "jun": "June",
+                            "july": "July", "jul": "July",
+                            "august": "August", "aug": "August",
+                            "september": "September", "sep": "September",
+                            "october": "October", "oct": "October",
+                            "november": "November", "nov": "November",
+                            "december": "December", "dec": "December",
+                        }
+                        target_month = None
+                        for abbr, full in month_names_map.items():
+                            if abbr in msg_lower.split():
+                                target_month = full
+                                break
+                        if not target_month:
+                            target_month = datetime.now().strftime("%B")
+
+                        # Fetch all orders
+                        order_resp = await self._execute_tool("get_invoices", {"page_length": 10000}, billerq_token, billerq_api_url, billerq_user_role)
+                        all_orders = []
+                        od = order_resp.get("data", {}) if isinstance(order_resp, dict) else {}
+                        if isinstance(od, dict):
+                            all_orders = od.get("data", [])
+                        elif isinstance(od, list):
+                            all_orders = od
+
+                        # Group by customer for target month
+                        customer_orders = {}
+                        for o in all_orders:
+                            inv_date = o.get("invoice_date") or ""
+                            if f"-{target_month}-" in inv_date:
+                                cid = o.get("customer_id")
+                                if cid not in customer_orders:
+                                    customer_orders[cid] = {
+                                        "name": (o.get("customer_name") or "").strip(),
+                                        "subscriber_id": o.get("subscriber_id", ""),
+                                        "types": set()
+                                    }
+                                customer_orders[cid]["types"].add(o.get("type"))
+
+                        # Find customers with both subscription and sale_order (addon)
+                        both_list = []
+                        for cid, info in customer_orders.items():
+                            if "subscription" in info["types"] and "sale_order" in info["types"]:
+                                both_list.append(info)
+
+                        tool_result = {"status": "success", "both_list": both_list, "month": target_month}
+                    except Exception as e:
+                        logger.exception("Error in get_both_subscription_addon")
+                        tool_result = {"error": f"Failed to compute combined query: {str(e)}"}
                 else:
                     logger.info("Executing tool: %s with args: %s", tool_name, tool_args)
                     try:
@@ -2338,6 +2400,46 @@ class BillerQAgent:
                             lines.append("\nFor the remaining, click the link below.")
                         rule_based_response = "\n".join(lines)
 
+                # 51. get_items
+                elif tool_name == "get_items":
+                    c_data = tool_result.get("data", {})
+                    items = []
+                    total = 0
+                    if isinstance(c_data, dict):
+                        items = c_data.get("data", [])
+                        total = c_data.get("total", len(items))
+                    elif isinstance(c_data, list):
+                        items = c_data
+                        total = len(items)
+                    if not items:
+                        rule_based_response = "No items found in the system."
+                    else:
+                        lines = [f"📦 **Total Items:** {total}\n", "**Items List:**"]
+                        for item in items[:10]:
+                            name = item.get('name', 'N/A')
+                            sku = item.get('sku', 'N/A')
+                            sale_price = item.get('sale_price', '0.00')
+                            category = item.get('category_name', 'N/A')
+                            status = (item.get('status') or 'N/A').upper()
+                            lines.append(f"• **{name}** — SKU: `{sku}` | Price: ₹{sale_price} | Category: {category} | Status: {status}")
+                        if total > 10:
+                            lines.append("\nFor the remaining items, click the link below.")
+                        rule_based_response = "\n".join(lines)
+
+                # 52. get_both_subscription_addon (custom computed)
+                elif tool_name == "get_both_subscription_addon":
+                    both_list = tool_result.get("both_list", [])
+                    target_month = tool_result.get("month", "")
+                    if not both_list:
+                        rule_based_response = f"No subscribers found who have taken both a subscription and an add-on in {target_month}."
+                    else:
+                        lines = [f"👥 **Subscribers with both Subscription & Add-on in {target_month}** (Total: {len(both_list)})\n"]
+                        for info in both_list:
+                            name = info.get('name', 'Unknown')
+                            sid = info.get('subscriber_id', 'N/A')
+                            lines.append(f"• **{name}** (ID: `{sid}`)")
+                        rule_based_response = "\n".join(lines)
+
             if rule_based_response:
                 logger.info("Bypassing Formatter LLM — using rule-based response: '%s'", rule_based_response)
                 metadata = self._get_redirect_metadata(tool_name, resolved_cust_id, resolved_cust_name, message, resolved_agent_id=resolved_agent_id)
@@ -2491,6 +2593,7 @@ class BillerQAgent:
             "get_sms_logs": ("/report/sms-message-logs", "View SMS logs"),
             "get_whatsapp_logs": ("/report/whatsApp-message-logs", "View WhatsApp logs"),
             "get_items": ("/Services/item", "View items"),
+            "get_both_subscription_addon": ("/billing/invoice", "View invoices"),
             "get_staff": ("/staff/staff", "View staff"),
             "get_roles": ("/staff/role", "View roles"),
             "get_message_settings": ("/settings/message-credit", "View credits"),
