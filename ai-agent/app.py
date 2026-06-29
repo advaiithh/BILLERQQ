@@ -58,8 +58,16 @@ def _create_llm():
     elif provider == "bedrock":
         from llm.bedrock_provider import BedrockProvider
 
-        logger.info("Using Bedrock provider")
-        return BedrockProvider()
+        model_id = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0")
+        region   = os.getenv("AWS_REGION", "us-east-1")
+        logger.info("Using Bedrock provider: model=%s, region=%s", model_id, region)
+        return BedrockProvider(
+            model_id=model_id,
+            region=region,
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+            aws_session_token=os.getenv("AWS_SESSION_TOKEN"),
+        )
 
     else:
         raise ValueError(f"Unknown LLM_PROVIDER: {provider}. Use 'ollama' or 'bedrock'.")
