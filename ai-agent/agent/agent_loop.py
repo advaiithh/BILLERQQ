@@ -1200,8 +1200,8 @@ class BillerQAgent:
                         rule_based_response = "No recent payments found in the system."
                     else:
                         lines = [
-                            f"💳 **Total Recent Payments:** **{total}** payments",
-                            "\n**Here are the top 5 recent payments:**"
+                            f"💳 **Recent Payments Summary** (Total: {total:,} payments)\n",
+                            "Here are the top 5 recent payments:\n"
                         ]
                         for item in items[:5]:
                             cname = item.get("name") or item.get("customer_name") or "Unknown Customer"
@@ -1210,7 +1210,13 @@ class BillerQAgent:
                             date = item.get("payment_date") or item.get("created_at") or "N/A"
                             method = item.get("payment_method") or item.get("method") or "N/A"
                             inv = item.get("invoice_no") or "N/A"
-                            lines.append(f"• **{cname}** (Sub ID: **{sub_id}**)\n  - **Invoice:** {inv}\n  - **Amount:** **₹{amount}**\n  - **Method:** **{method}**\n  - **Date:** **{date}**")
+                            lines.append(
+                                f"💰 **Payment by {cname.strip()}** (ID: `{sub_id}`)\n"
+                                f"• **Invoice:** #{inv}\n"
+                                f"• **Amount:** ₹{format_curr(amount)} 🟢\n"
+                                f"• **Method:** {method}\n"
+                                f"• **Date:** {date}\n"
+                            )
                         
                         # Sum total amount of recent payments
                         total_sum = 0.0
@@ -1223,7 +1229,8 @@ class BillerQAgent:
                         lines.append(f"- **Total Collected Amount:** **₹{format_curr(total_sum)}** 🟢")
                         lines.append(f"- **Total Transactions:** {total}")
                         if total > 5:
-                            lines.append("\nFor the remaining, click the link below.")
+                            remaining = total - 5
+                            lines.append(f"---\n💡 *For the remaining {remaining:,} payments, click the redirection button below.*")
                         rule_based_response = "\n".join(lines)
 
                 # 4. get_unpaid_customers
@@ -1519,17 +1526,23 @@ class BillerQAgent:
                         else:
                             rule_based_response = "No invoices found in the system."
                     else:
-                        header = f"📄 **Invoices for {resolved_cust_name}:**" if resolved_cust_name else f"📄 **Total Invoices:** **{total}**"
-                        lines = [header, "\n**Here are the recent invoices:**"]
+                        header = f"📄 **Invoices for {resolved_cust_name}:**" if resolved_cust_name else f"📄 **Invoices Summary** (Total: {total:,})\n"
+                        lines = [header, "Here are the recent invoices:\n"]
                         for item in items[:5]:
                             inv_no = item.get("invoice_no") or item.get("id") or "N/A"
                             pref = item.get("invoice_prefix") or "INV"
                             cname = item.get("customer_name") or resolved_cust_name or "Unknown Customer"
                             sub_id = item.get("subscriber_id") or "N/A"
-                            amount = item.get("amount") or f"₹{item.get('balance', '0.00')}"
+                            amount = item.get("amount") or item.get("balance") or "0.00"
                             date = item.get("invoice_date") or item.get("created_date") or "N/A"
-                            status = item.get("payment_status") or item.get("order_status") or "N/A"
-                            lines.append(f"• **Invoice #{pref}{inv_no}** — **{cname}** (Sub ID: **{sub_id}**)\n  - **Amount:** {amount}\n  - **Status:** {status.upper()}\n  - **Date:** {date}")
+                            status = (item.get("payment_status") or item.get("order_status") or "N/A").upper()
+                            status_emoji = "🟢" if status == "PAID" else "🔴" if status in ("UNPAID", "PENDING") else "⚠️"
+                            lines.append(
+                                f"🧾 **Invoice #{pref}{inv_no}** — **{cname}** (ID: `{sub_id}`)\n"
+                                f"• **Amount:** ₹{format_curr(amount)}\n"
+                                f"• **Status:** {status} {status_emoji}\n"
+                                f"• **Date:** {date}\n"
+                            )
                         # Count statuses in items
                         paid_cnt = sum(1 for x in items if str(x.get("payment_status") or x.get("order_status", "")).lower() == "paid")
                         unpaid_cnt = sum(1 for x in items if str(x.get("payment_status") or x.get("order_status", "")).lower() in ("unpaid", "pending"))
@@ -1537,13 +1550,14 @@ class BillerQAgent:
                         
                         lines.append("\n📊 **Invoices Metrics Summary:**")
                         lines.append(f"- **Paid Invoices:** {paid_cnt} 🟢")
-                        lines.append(f"- **Unpaid Invoices:** {unpaid_cnt} 🔴")
+                        lines.append(f"- **Unpaid/Pending Invoices:** {unpaid_cnt} 🔴")
                         if overdue_cnt > 0:
                             lines.append(f"- **Overdue Invoices:** {overdue_cnt} ⚠️")
                         lines.append(f"- **Total Listed:** {len(items)}")
                         
                         if total > 5 or len(items) > 5:
-                            lines.append("\nFor the remaining, click the link below.")
+                            remaining = total - 5
+                            lines.append(f"---\n💡 *For the remaining {remaining:,} invoices, click the redirection button below.*")
                         rule_based_response = "\n".join(lines)
 
                 # 13. get_all_customers
@@ -2650,7 +2664,7 @@ class BillerQAgent:
         target_status = status_filter.upper() if status_filter else "OPEN"
         lines = []
         emoji = "🟢" if target_status == "OPEN" else "🟠" if "PROGRESS" in target_status else "🔴"
-        lines.append(f"{emoji} **{target_status} COMPLAINTS** (Top 5)")
+        lines.append(f"{emoji} **{target_status} COMPLAINTS** (Top 5)\n")
         
         if not items:
             lines.append(f"- No {target_status.lower()} complaints found.")
@@ -2659,13 +2673,20 @@ class BillerQAgent:
                 cname = item.get("customer_name") or item.get("name") or "Unknown"
                 comp_no = item.get("complaint_no") or item.get("id") or "N/A"
                 prob = item.get("problem_type") or "N/A"
-                status = item.get("status") or "N/A"
+                status = (item.get("status") or "N/A").upper()
                 date = item.get("created_at") or "N/A"
-                lines.append(f"• **Complaint #{comp_no}** — **{cname}**\n  - **Status:** {status.upper()}\n  - **Problem Type:** {prob}\n  - **Date:** {date}")
+                status_emoji = "🔴" if status == "OPEN" else "🟠" if "PROGRESS" in status else "🟢"
+                lines.append(
+                    f"🛠️ **Complaint #{comp_no}** — **{cname.strip()}**\n"
+                    f"• **Status:** {status} {status_emoji}\n"
+                    f"• **Problem Type:** {prob}\n"
+                    f"• **Date:** {date}\n"
+                )
 
         list_total = len(items)
         if list_total > 5:
-            lines.append("\nFor the remaining, click the link below.")
+            remaining = list_total - 5
+            lines.append(f"---\n💡 *For the remaining {remaining:,} complaints, click the redirection button below.*")
 
         lines.append("\n---")
         lines.append("\n📊 **Complaints Summary:**")
