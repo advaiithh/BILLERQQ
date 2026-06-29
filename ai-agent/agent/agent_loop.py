@@ -1110,7 +1110,11 @@ class BillerQAgent:
                             sub_id = item.get("subscriber_id") or "N/A"
                             bal = item.get("order_balance") or "0.00"
                             area = item.get("area_name") or "N/A"
-                            lines.append(f"• **{cname.strip()}** (Sub ID: **{sub_id}**)\n  - **Dues:** **₹{bal}**\n  - **Area:** {area}")
+                            lines.append(
+                                f"👤 **{cname.strip()}** (ID: `{sub_id}`)\n"
+                                f"• **Dues:** **₹{bal}** 🔴\n"
+                                f"• **Area:** {area}\n"
+                            )
                         
                         lines.append("\n📊 **Dues Metrics Summary:**")
                         lines.append(f"- **Unpaid Customers Listed:** {min(5, total_count)} 🔴")
@@ -1160,7 +1164,12 @@ class BillerQAgent:
                             pkg = item.get("package_name") or "N/A"
                             start = item.get("start_date") or "N/A"
                             billing_type = item.get("type") or "Master"
-                            lines.append(f"• **{cust}** (Sub ID: **{sub_id}**)\n  - **Package:** {pkg}\n  - **Type:** {billing_type}\n  - **Start Date:** {start}")
+                            lines.append(
+                                f"👤 **{cust.strip()}** (ID: `{sub_id}`)\n"
+                                f"• **Package:** {pkg}\n"
+                                f"• **Billing Type:** {billing_type}\n"
+                                f"• **Start Date:** {start}\n"
+                            )
                         
                         lines.append("\n📊 **Recurring Metrics Summary:**")
                         lines.append(f"- **Recurring Profiles Listed:** {min(5, total)}")
@@ -1253,9 +1262,14 @@ class BillerQAgent:
                                 ]
                                 for c in customers[:5]:
                                     cname = c.get("customer_name") or c.get("name") or "Unknown Customer"
+                                    sub_id = c.get("subscriber_id") or "N/A"
                                     area = c.get("area_name") or c.get("billing_area") or c.get("area") or "N/A"
                                     balance = c.get("dues") or c.get("balance") or c.get("unpaid_amount") or 0
-                                    lines.append(f"• **{cname.strip()}**\n  - **Unpaid Balance:** **₹{format_curr(balance)}**\n  - **Area:** {area}")
+                                    lines.append(
+                                        f"👤 **{cname.strip()}** (ID: `{sub_id}`)\n"
+                                        f"• **Unpaid Balance:** **₹{format_curr(balance)}** 🔴\n"
+                                        f"• **Area:** {area}\n"
+                                    )
                                 
                                 lines.append("\n📊 **Unpaid Metrics Summary:**")
                                 lines.append(f"- **Unpaid Customers Listed:** {min(5, total_count)} 🔴")
@@ -1455,16 +1469,24 @@ class BillerQAgent:
                         if not data:
                             rule_based_response = "No customers found in the system." if tool_name == "get_all_customers" else "No customers found matching your search query."
                         else:
-                            lines = [f"Found {total_count} customers in total:" if tool_name == "get_all_customers" else f"Found {len(data)} matching customers:"]
+                            header = f"👥 **Customer Search Results** (Found {len(data)} matching):" if tool_name == "search_customer" else f"👥 **All Customers List** (Found {total_count:,} in total):"
+                            lines = [header, "Here are the top results:\n"]
                             for item in data[:5]:
                                 name = item.get("name") or item.get("customer_name") or "Unknown"
                                 sub_id = item.get("subscriber_id") or "N/A"
-                                status = item.get("status") or "N/A"
+                                status = (item.get("status") or "N/A").upper()
                                 mobile = item.get("mobile") or "N/A"
                                 area = item.get("area_name") or item.get("area") or "N/A"
-                                lines.append(f"• **{name}** (Sub ID: **{sub_id}**)\n  - **Status:** {status.upper()}\n  - **Mobile:** {mobile}\n  - **Area:** {area}")
+                                status_emoji = "🟢" if status == "ACTIVE" else "🔴" if status in ("INACTIVE", "BLOCKED") else "⚠️"
+                                lines.append(
+                                    f"👤 **{name.strip()}** (ID: `{sub_id}`)\n"
+                                    f"• **Status:** {status} {status_emoji}\n"
+                                    f"• **Mobile:** {mobile}\n"
+                                    f"• **Area:** {area}\n"
+                                )
                             if total_count > 5 or len(data) > 5:
-                                lines.append("\nFor the remaining, click the link below.")
+                                remaining = total_count - 5
+                                lines.append(f"---\n💡 *For the remaining {remaining:,} customers, click the redirection button below.*")
                             rule_based_response = "\n".join(lines)
 
                 # 12. get_invoices
@@ -1653,13 +1675,19 @@ class BillerQAgent:
 
                 # 19. get_customer_payment_report
                 elif tool_name == "get_customer_payment_report":
-                    payment_data = tool_result.get("payment", [])
+                    payment_obj = tool_result.get("payment", {}) if isinstance(tool_result, dict) else {}
+                    payment_data = []
+                    if isinstance(payment_obj, dict):
+                        payment_data = payment_obj.get("data", [])
+                    elif isinstance(payment_obj, list):
+                        payment_data = payment_obj
+
                     if not payment_data:
                         rule_based_response = "No customer payment report data found."
                     else:
                         lines = [f"Customer Payment Report Summary (Loaded {len(payment_data)} items):"]
                         for item in payment_data[:5]:
-                            lines.append(f"• **{item.get('name')}**\n  - **Paid Amount:** **₹{item.get('paid_amount')}**\n  - **Date:** **{item.get('payment_date')}**\n  - **Method:** **{item.get('payment_method')}**")
+                            lines.append(f"• **{item.get('name') or item.get('customer_name') or 'N/A'}**\n  - **Paid Amount:** **₹{item.get('paid_amount')}**\n  - **Date:** **{item.get('payment_date') or item.get('created_at') or 'N/A'}**\n  - **Method:** **{item.get('payment_method') or 'N/A'}**")
                         rule_based_response = "\n".join(lines)
 
                 # 20. get_package_report
@@ -2470,7 +2498,7 @@ class BillerQAgent:
         lines = []
 
         if target_status == "archived":
-            lines.append("⚠️ **ARCHIVED CUSTOMERS** (Top 5)")
+            lines.append("⚠️ **ARCHIVED CUSTOMERS** (Top 5)\n")
             if not archived_data:
                 lines.append("- No archived customers found.")
             else:
@@ -2479,7 +2507,12 @@ class BillerQAgent:
                     sub_id = c.get("subscriber_id") or "N/A"
                     mobile = c.get("mobile") or "N/A"
                     jdate = c.get("join_date") or "N/A"
-                    lines.append(f"• **{cname}** (Sub ID: **{sub_id}**)\n  - **Status:** ARCHIVED\n  - **Mobile:** {mobile}\n  - **Joined:** {jdate}")
+                    lines.append(
+                        f"👤 **{cname.strip()}** (ID: `{sub_id}`)\n"
+                        f"• **Status:** ARCHIVED ⚠️\n"
+                        f"• **Mobile:** {mobile}\n"
+                        f"• **Joined:** {jdate}\n"
+                    )
             list_total = archived_count
         else:
             try:
@@ -2491,7 +2524,7 @@ class BillerQAgent:
 
             status_label = target_status.upper()
             emoji = "🟢" if status_label == "ACTIVE" else "🔴" if status_label == "INACTIVE" else "⚠️"
-            lines.append(f"{emoji} **{status_label} CUSTOMERS** (Top 5)")
+            lines.append(f"{emoji} **{status_label} CUSTOMERS** (Top 5)\n")
             
             if not customers:
                 lines.append(f"- No {target_status} customers found.")
@@ -2499,10 +2532,16 @@ class BillerQAgent:
                 for c in customers[:5]:
                     cname = c.get("name") or c.get("customer_name") or "Unknown"
                     sub_id = c.get("subscriber_id") or "N/A"
-                    status = c.get("status") or target_status
+                    status = (c.get("status") or target_status).upper()
                     mobile = c.get("mobile") or "N/A"
                     area = c.get("area_name") or c.get("area") or "N/A"
-                    lines.append(f"• **{cname}** (Sub ID: **{sub_id}**)\n  - **Status:** {status.upper()}\n  - **Mobile:** {mobile}\n  - **Area:** {area}")
+                    status_emoji = "🟢" if status == "ACTIVE" else "🔴" if status in ("INACTIVE", "BLOCKED") else "⚠️"
+                    lines.append(
+                        f"👤 **{cname.strip()}** (ID: `{sub_id}`)\n"
+                        f"• **Status:** {status} {status_emoji}\n"
+                        f"• **Mobile:** {mobile}\n"
+                        f"• **Area:** {area}\n"
+                    )
             
             list_total = len(customers)
             if target_status == "active" and active_count > 0:
@@ -2511,7 +2550,8 @@ class BillerQAgent:
                 list_total = inactive_count
 
         if list_total > 5:
-            lines.append("\nFor the remaining, click the link below.")
+            remaining = list_total - 5
+            lines.append(f"---\n💡 *For the remaining {remaining:,} customers, click the redirection button below.*")
 
         lines.append("\n---")
         lines.append("\n📊 **Customer Metrics Summary:**")
