@@ -2356,8 +2356,8 @@
         async function sendMessage(text) {
             if (isLoading) return;
 
-            // Promote query in Fast Commands dropdown
-            promoteCommand(text);
+            // Promote query in Fast Commands dropdown (disabled so custom prompts don't enter the fast commands list)
+            // promoteCommand(text);
 
             // Hide quick actions after first message
             if (quickActions) {

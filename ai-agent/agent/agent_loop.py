@@ -1254,8 +1254,8 @@ class BillerQAgent:
                                 lines.append("\nFor the remaining, click the link below.")
                             rule_based_response = "\n".join(lines)
 
-                # 6. complaint_status_count
-                elif tool_name == "complaint_status_count":
+                # 6. get_complaint_status_count
+                elif tool_name == "get_complaint_status_count":
                     status_f = "open" if "open" in msg_lower else "in progress" if "progress" in msg_lower else "closed" if ("closed" in msg_lower or "resolved" in msg_lower) else None
                     rule_based_response = await self._get_complaints_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_filter=status_f)
 
@@ -2410,8 +2410,16 @@ class BillerQAgent:
 
         try:
             archived_resp = await self._execute_tool("get_archived_customers", {}, billerq_token, billerq_api_url, billerq_user_role)
-            archived_data = archived_resp.get("data", []) if isinstance(archived_resp, dict) else []
-            archived_count = len(archived_data) if isinstance(archived_data, list) else 0
+            archived_raw = archived_resp.get("data", []) if isinstance(archived_resp, dict) else []
+            if isinstance(archived_raw, dict):
+                archived_data = archived_raw.get("data", [])
+                archived_count = archived_raw.get("total", len(archived_data))
+            elif isinstance(archived_raw, list):
+                archived_data = archived_raw
+                archived_count = len(archived_raw)
+            else:
+                archived_data = []
+                archived_count = 0
         except Exception:
             archived_data = []
             archived_count = 0
