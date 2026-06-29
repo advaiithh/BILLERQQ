@@ -972,7 +972,9 @@ class BillerQAgent:
             # -------------------------------------------------------------
             # Speed optimization: bypass Formatter LLM for simple queries, metrics, errors or empty data
             rule_based_response = None
-            if isinstance(tool_result, dict):
+            if tool_name == "none":
+                rule_based_response = await self._get_fallback_dashboard_response(billerq_token, billerq_api_url, billerq_user_role)
+            elif isinstance(tool_result, dict):
                 if "error" in tool_result:
                     err_msg = tool_result["error"]
                     if "Please login to proceed" in str(err_msg) or "403" in str(err_msg):
@@ -2233,7 +2235,7 @@ class BillerQAgent:
                 final_text = final_text.strip()
             except Exception as e:
                 logger.exception("Formatter call failed")
-                final_text = "I encountered an issue formatting the API response. Here is the raw information: " + data_str[:500]
+                final_text = await self._get_fallback_dashboard_response(billerq_token, billerq_api_url, billerq_user_role)
 
             # Ensure that redirect button metadata matches the tool executed
             metadata = self._get_redirect_metadata(tool_name, resolved_cust_id, resolved_cust_name, message, resolved_agent_id=resolved_agent_id)
@@ -2286,6 +2288,8 @@ class BillerQAgent:
             metadata["customer_name"] = resolved_cust_name
 
         if not tool_name or tool_name == "none":
+            metadata["redirect_url"] = "/dashboard/default"
+            metadata["redirect_label"] = "View Dashboard"
             return metadata
 
         tool_map = {
@@ -2587,6 +2591,48 @@ class BillerQAgent:
         lines.append(f"- **Closed Complaints:** {closed_count} 🔴")
         lines.append(f"- **Total Complaints:** {total_count}")
 
+        return "\n".join(lines)
+
+    async def _get_fallback_dashboard_response(self, billerq_token, billerq_api_url, billerq_user_role):
+        try:
+            db_resp = await self._execute_tool("get_dashboard_data", {}, billerq_token, billerq_api_url, billerq_user_role)
+            data = db_resp.get("data", {}) if isinstance(db_resp, dict) else {}
+        except Exception:
+            data = {}
+
+        comp = data.get("complaints", {}) if isinstance(data, dict) else {}
+        subs = data.get("subscriptions", {}) if isinstance(data, dict) else {}
+        pay = data.get("payment_collection", {}) if isinstance(data, dict) else {}
+        cond = data.get("check_condition", {}) if isinstance(data, dict) else {}
+
+        lines = [
+            "I couldn't understand that query. Please try typing a clear prompt, such as:",
+            "• *\"Show active customers\"*",
+            "• *\"Show recent payments\"*",
+            "• *\"Who has overdue payments?\"*",
+            "• *\"Show all complaints\"*",
+            "",
+            "📊 **Dashboard Overview:**",
+            f"- **Total Customers:** {cond.get('customers', 0):,}",
+            f"- **Active STBs:** {cond.get('stb', 0):,} 🟢",
+            f"- **Active Packages:** {cond.get('packages', 0):,}",
+            "",
+            "💰 **Payments & Collection:**",
+            f"- **Collected Today:** ₹{pay.get('today', '0.00')}",
+            f"- **Collected This Month:** ₹{pay.get('this_month', '0.00')}",
+            f"- **Outstanding Dues:** ₹{pay.get('dues', '0.00')} 🔴",
+            f"- **Wallet Amount:** ₹{pay.get('wallet_amount', '0.00')}",
+            "",
+            "📦 **Subscriptions Summary:**",
+            f"- **Total Active Subscriptions:** {subs.get('totalSubscriptions', 0)} 🟢",
+            f"- **Expired Subscriptions:** {subs.get('expired', 0)} 🔴",
+            f"- **Expiring Today:** {subs.get('today', 0)} ⚠️",
+            "",
+            "🛠️ **Complaints Status:**",
+            f"- **Unresolved Complaints:** {comp.get('un_resolved', 0)} 🔴",
+            f"- **In Process:** {comp.get('in_process', 0)} 🟠",
+            f"- **Resolved:** {comp.get('resolved', 0)} 🟢"
+        ]
         return "\n".join(lines)
 
     async def _get_stb_dashboard_response(self, billerq_token, billerq_api_url, billerq_user_role, status_filter=None):

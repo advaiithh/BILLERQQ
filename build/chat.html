@@ -1969,6 +1969,8 @@
                 // ---- Start / Stop toggle ----
                 micBtn.addEventListener('click', (e) => {
                     e.preventDefault();
+                    micBtn.blur(); // Remove focus immediately so Enter doesn't click it
+                    chatInput.focus(); // Shift focus to input box
                     if (isRecording) {
                         recognition.stop();
                     } else {
@@ -1982,12 +1984,27 @@
                     }
                 });
 
+                // Prevent Enter key on micBtn from triggering standard click.
+                // Instead, send the current message if there is text.
+                micBtn.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        micBtn.blur();
+                        chatInput.focus();
+                        const val = chatInput.value.trim();
+                        if (val && !isLoading) {
+                            sendMessage(val);
+                        }
+                    }
+                });
+
                 // ---- Recording started ----
                 recognition.onstart = () => {
                     isRecording = true;
                     micBtn.classList.add('recording');
                     micBtn.title = 'Tap to stop recording';
                     chatInput.placeholder = '🎙️  Listening… speak now';
+                    chatInput.focus();
                 };
 
                 // ---- Live interim results (shows words as you speak) ----
@@ -2013,6 +2030,7 @@
                         chatInput.value = finalText.trim();
                         sendBtn.disabled = false;
                     }
+                    chatInput.focus();
                 };
 
                 // ---- Recording stopped (end of utterance) ----
@@ -2021,6 +2039,7 @@
                     micBtn.classList.remove('recording');
                     micBtn.title = 'Voice input';
                     chatInput.placeholder = 'Ask me anything about BillerQ...';
+                    chatInput.focus();
 
                     // Auto-send if we have a transcript
                     const transcript = chatInput.value.trim();
@@ -2038,6 +2057,7 @@
                     micBtn.classList.remove('recording');
                     chatInput.placeholder = 'Ask me anything about BillerQ...';
                     chatInput.value = '';
+                    chatInput.focus();
 
                     const friendly = {
                         'no-speech'       : 'No speech detected. Try again.',
