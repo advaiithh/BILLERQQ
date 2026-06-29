@@ -36,6 +36,7 @@ from tools.subscription import (
     get_single_subscription,
     get_subscription_history,
     get_pending_subscriptions,
+    get_recurring_data,
     get_addon,
     get_addon_history,
     get_items,
@@ -163,6 +164,7 @@ TOOL_MAP = {
     "get_providers": get_providers,
     "get_categories": get_categories,
     "get_tax_classes": get_tax_classes,
+    "get_recurring_data": get_recurring_data,
 }
 
 ROUTER_SYSTEM_PROMPT_TEMPLATE = """You are the API Router for BillerQ AI Assistant.
@@ -177,7 +179,7 @@ Today's Date: {current_date}
 3. `get_unpaid_customers` - To get customers with unpaid/outstanding balances.
 4. `get_overdue_list` - To get a list of overdue payments/collections.
 5. `get_overdues` - To get summary counts of overdue payments.
-6. `get_complaints` - To get lists of customer complaints.
+6. `get_complaints` - To get lists of customer complaints. Can take optional "status" argument (e.g. "open", "in progress", "closed", "resolved").
 7. `get_complaint_status_count` - To get counts of complaint statuses.
 8. `get_dashboard_data` - To get general dashboard metrics, revenue summaries, overall performance, daily collection (today's collection), monthly collection (this month's collection), total outstanding dues, and total wallet amount.
 9. `get_connection_data` - To get connection statistics (active/inactive).
@@ -195,6 +197,7 @@ Today's Date: {current_date}
 21. `get_customer_stb` - To get Set-Top Box (STB) details of a specific customer. (Requires a customer name).
 22. `search_customer` - To search/list customers, or if the intent is a general list/search of customer names.
 23. `get_invoices` - To get all invoices/orders in the system or filter invoices/orders for a specific customer.
+24. `get_recurring_data` - To get a list of recurring billing invoice profiles or recurring customers.
 
 If no tool is needed (e.g. general greeting, chit-chat, simple question that doesn't need database access), select "none".
 
@@ -213,6 +216,9 @@ If no tool is needed (e.g. general greeting, chit-chat, simple question that doe
 - User: "how many active customers" -> {{"tool": "get_customer_status_count", "arguments": {{}}, "customer_name": null}}
 - User: "details of Joy P" -> {{"tool": "get_customer_profile", "arguments": {{}}, "customer_name": "Joy P"}}
 - User: "payments of 9876543210" -> {{"tool": "get_payment_history", "arguments": {{}}, "customer_name": "9876543210"}}
+- User: "show open complaints" -> {{"tool": "get_complaints", "arguments": {{"status": "open"}}, "customer_name": null}}
+- User: "billing complaints of Joy P" -> {{"tool": "get_complaints", "arguments": {{"status": "open"}}, "customer_name": "Joy P"}}
+- User: "recurring profiles of Jinto" -> {{"tool": "get_recurring_data", "arguments": {{}}, "customer_name": "Jinto"}}
 - User: "show me recent payments" -> {{"tool": "get_recent_payments", "arguments": {{}}, "customer_name": null}}
 - User: "hello there!" -> {{"tool": "none", "arguments": {{}}, "customer_name": null}}
 """
@@ -241,6 +247,10 @@ Today's Date: {current_date}
        - **Status:** [OPEN/IN PROGRESS/RESOLVED]
        - **Problem Type:** [Problem Type]
        - **Date:** [Date]
+     • **Recurring Profile for [Customer Name]** (Sub ID: **[SubID]**)
+       - **Package:** [Package Name]
+       - **Type:** [Type]
+       - **Start Date:** [Date]
    - **Direct user to click below for remaining**: For the remaining records, write "For the remaining, click the link below." or similar text. Do not list any more.
 2. If the user query is about a specific customer:
    - Display their profile details using next-next lines with nested sub-bullets:
@@ -305,6 +315,46 @@ class BillerQAgent:
             # Step 1: Route/Select Tool
             # -------------------------------------------------------------
             msg_lower = message.lower().strip()
+            
+            # Direct UI navigation routing
+            navigation_mappings = {
+                ("dashboard",): ("/dashboard/default", "Dashboard"),
+                ("lead management", "lead manager", "leads", "enquiries", "enquiry"): ("/lead-manage/lead", "Lead Management"),
+                ("customer management", "customers", "customer list", "customer"): ("/customers/customer", "Customer Management"),
+                ("billing management", "billing", "subscriptions", "recurring", "subscription", "recurring list"): ("/billing/subscription", "Billing Management"),
+                ("services & products", "services", "products", "addons", "addon", "items", "item"): ("/Services/addon", "Services & Products"),
+                ("expenses & income", "expenses", "income", "expense", "vendors", "headers"): ("/expenses-income/expense", "Financial Management > Expenses & Income"),
+                ("banking", "bank", "transactions", "transaction", "accounts"): ("/banking/account", "Financial Management > Banking"),
+                ("reports & analytics", "reports", "report", "analytics", "collection report", "tax report", "wallet report"): ("/report/unpaid-customer", "Reports & Analytics"),
+                ("complaint management", "complaints", "complaint", "problems"): ("/complaints", "Complaint Management"),
+                ("staff management", "staff", "roles", "role"): ("/staff/staff", "Staff Management"),
+                ("system settings", "settings", "tax classes", "providers", "categories"): ("/settings/categories", "System Settings")
+            }
+            
+            # Pure categories that default to redirection on exact match
+            pure_categories = {
+                "dashboard", "lead management", "customer management", "billing management",
+                "services & products", "financial management", "expenses & income", "banking",
+                "reports & analytics", "complaint management", "staff management", "system settings"
+            }
+            
+            is_navigation_request = any(kw in msg_lower for kw in ("redirect", "go to", "open", "navigate", "show me page", "show page", "view page"))
+            
+            exact_match = None
+            for keywords, (path, label) in navigation_mappings.items():
+                is_pure_match = msg_lower in pure_categories and msg_lower in keywords
+                if is_pure_match or (is_navigation_request and any(kw in msg_lower for kw in keywords)):
+                    exact_match = (path, label)
+                    break
+                    
+            if exact_match:
+                path, label = exact_match
+                response_text = f"Sure! I can help you redirect to the **{label}** page. Click the button below to navigate there."
+                return response_text, {
+                    "redirect_url": path,
+                    "redirect_label": f"Go to {label}"
+                }
+            
             fast_result = None
 
             # Fast routing rules
@@ -372,7 +422,9 @@ class BillerQAgent:
                 "last", "previous", "available", "show", "list", "view", "count", "status", "report", "stb",
                 "problem", "package", "area", "bill", "bills", "order", "orders", "subscription", "subscriptions",
                 "detail", "details", "profile", "info", "about", "history", "wallet", "dues", "due", "balance", "who", "has", "have",
-                "phone", "number", "mobile", "contact", "id", "place", "location", "and"
+                "phone", "number", "mobile", "contact", "id", "place", "location", "and", "billing", "technical", "closed", "open",
+                "progress", "resolved", "unresolved", "complaints", "complaint", "recurring", "type", "issues", "issue",
+                "get", "find", "search", "lookup", "give", "tell", "me"
             }
             
             if "'s" in msg_lower:
@@ -386,17 +438,17 @@ class BillerQAgent:
                     name_extracted = candidate
 
             if not name_extracted:
-                cust_match = re.search(r"\b(?:details|profile|info|about|stb|subscription|payments?|history|invoices?|bills?|wallet|dues?|balance|phone|number|mobile|contact)\s+(?:of|for)\s+([a-zA-Z0-9\s\.\-\'\u00C0-\u017F]+)", msg_lower)
+                cust_match = re.search(r"\b(?:details|profile|info|about|stb|subscription|payments?|history|invoices?|bills?|wallet|dues?|balance|phone|number|mobile|contact|complaints?|recurring)(?:\s+[a-zA-Z0-9_]+)?\s+(?:of|for)\s+([a-zA-Z0-9\s\.\-\'\u00C0-\u017F]+)", msg_lower)
                 if cust_match:
                     name_extracted = cust_match.group(1).strip()
                 else:
-                    cust_match2 = re.search(r"\b([a-zA-Z0-9\s\.\-\'\u00C0-\u017F]+)\s+(?:wallet|dues?|balance|stb|subscription|payments?|history|invoices?|bills?|phone|number|mobile|contact)\b", msg_lower)
+                    cust_match2 = re.search(r"\b([a-zA-Z0-9\s\.\-\'\u00C0-\u017F]+)\s+(?:wallet|dues?|balance|stb|subscription|payments?|history|invoices?|bills?|phone|number|mobile|contact|complaints?|recurring)\b", msg_lower)
                     if cust_match2:
                         name_extracted = cust_match2.group(1).strip()
             
             if name_extracted:
                 # 1. Remove any trailing keywords that might have been greedily captured first
-                for kw in ["wallet", "dues", "due", "balance", "stb", "subscription", "payments", "payment", "history", "invoices", "invoice", "bills", "bill", "total", "phone", "number", "mobile", "contact"]:
+                for kw in ["wallet", "dues", "due", "balance", "stb", "subscription", "payments", "payment", "history", "invoices", "invoice", "bills", "bill", "total", "phone", "number", "mobile", "contact", "complaints", "complaint", "recurring"]:
                     if name_extracted.lower().endswith(" " + kw):
                         name_extracted = name_extracted[:-len(kw)-1].strip()
                     elif name_extracted.lower() == kw:
@@ -519,9 +571,37 @@ class BillerQAgent:
                 logger.info("Bypassing Formatter LLM — using rule-based response: '%s'", comparison_text[:80])
                 return comparison_text, meta
 
-            if agent_col_match:
-                agent_name = agent_col_match.group(1).strip()
-                fast_result = {"tool": "get_connection_data", "arguments": {}, "customer_name": agent_name}
+            if "recurring" in msg_lower:
+                fast_result = {"tool": "get_recurring_data", "arguments": {}, "customer_name": name_extracted}
+            elif agent_col_match:
+                raw_agent_name = agent_col_match.group(1).strip()
+                agent_name = re.sub(r"\b(report|of|for|by|agent)\b", "", raw_agent_name.lower()).strip()
+                if not agent_name or agent_name == "all":
+                    agent_name = None
+                
+                # Check for date parameters in the query
+                start_date = None
+                end_date = None
+                if "last year" in msg_lower or "2025" in msg_lower:
+                    start_date = "01-01-2025"
+                    end_date = "31-12-2025"
+                elif "this year" in msg_lower or "2026" in msg_lower:
+                    start_date = "01-01-2026"
+                    end_date = "31-12-2026"
+                elif "2024" in msg_lower:
+                    start_date = "01-01-2024"
+                    end_date = "31-12-2024"
+                
+                args = {}
+                if start_date and end_date:
+                    args["start_date"] = start_date
+                    args["end_date"] = end_date
+                    
+                fast_result = {
+                    "tool": "get_agent_collection_report",
+                    "arguments": args,
+                    "customer_name": agent_name
+                }
             elif any(k in msg_lower for k in ["item list", "items list", "show items", "list items"]):
                 fast_result = {"tool": "get_items", "arguments": {}, "customer_name": None}
             elif any(k in msg_lower for k in ["staff list", "show staff", "view staff", "list staff", "agent list", "agents list"]):
@@ -568,6 +648,10 @@ class BillerQAgent:
                     tool = "get_subscription"
                 elif "invoice" in msg_lower or "bill" in msg_lower:
                     tool = "get_invoices"
+                elif "complaint" in msg_lower:
+                    tool = "get_complaints"
+                elif "recurring" in msg_lower:
+                    tool = "get_recurring_data"
                 fast_result = {"tool": tool, "arguments": {}, "customer_name": name_extracted}
             elif re.search(r"\bhow\s+many\s+(?:active|inactive|total)\b", msg_lower) or re.search(r"\b(?:active|inactive|total)\s+customers?\s+count\b", msg_lower):
                 fast_result = {"tool": "get_customer_status_count", "arguments": {}, "customer_name": None}
@@ -608,7 +692,9 @@ class BillerQAgent:
             elif "complaint status" in msg_lower or "complaints count" in msg_lower:
                 fast_result = {"tool": "get_complaint_status_count", "arguments": {}, "customer_name": None}
             elif "complaint" in msg_lower:
-                fast_result = {"tool": "get_complaints", "arguments": {}, "customer_name": None}
+                fast_result = {"tool": "get_complaints", "arguments": {}, "customer_name": name_extracted}
+            elif "recurring" in msg_lower:
+                fast_result = {"tool": "get_recurring_data", "arguments": {}, "customer_name": name_extracted}
             elif "archived customer" in msg_lower or "archived customers" in msg_lower or "deleted customer" in msg_lower or "deleted customers" in msg_lower:
                 fast_result = {"tool": "get_archived_customers", "arguments": {}, "customer_name": None}
             elif "pending subscription" in msg_lower or "pending subscriptions" in msg_lower or "pending activation" in msg_lower or "pending activations" in msg_lower:
@@ -712,6 +798,8 @@ class BillerQAgent:
             # -------------------------------------------------------------
             resolved_cust_id = None
             resolved_cust_name = None
+            resolved_agent_id = None
+            resolved_agent_name = None
             
             # If the tool is a customer tool, or customer_name_query is present
             requires_customer = tool_name in (
@@ -729,7 +817,7 @@ class BillerQAgent:
                     resolved_cust_name = context.get("last_customer_name")
                     logger.info("Resolved customer from context: %s (ID: %s)", resolved_cust_name, resolved_cust_id)
                     
-            if requires_customer and customer_name_query and customer_name_query not in ("inactive_list", "latest"):
+            if (requires_customer or tool_name in ("get_complaints", "get_recurring_data")) and customer_name_query and customer_name_query not in ("inactive_list", "latest"):
                 from agent.resolver import resolver
                 try:
                     res = await resolver.resolve_customer(str(customer_name_query))
@@ -836,6 +924,34 @@ class BillerQAgent:
                 # If the tool was just search_customer, promote it to get_customer_profile for richer details
                 if tool_name == "search_customer":
                     tool_name = "get_customer_profile"
+
+            # If it is agent collection report, we resolve agent name to user_id
+            if tool_name == "get_agent_collection_report" and customer_name_query:
+                try:
+                    users_resp = await self._execute_tool("get_user_select", {}, billerq_token, billerq_api_url, billerq_user_role)
+                    users_list = users_resp.get("data", []) if isinstance(users_resp, dict) else []
+                    
+                    matched_user = None
+                    agent_query = str(customer_name_query).lower().strip()
+                    agent_query = re.sub(r"\b(report|of|for|by|agent)\b", "", agent_query).strip()
+                    
+                    for u in users_list:
+                        u_name = str(u.get("user_name", "")).lower()
+                        if agent_query == u_name:
+                            matched_user = u
+                            break
+                    if not matched_user:
+                        for u in users_list:
+                            u_name = str(u.get("user_name", "")).lower()
+                            if agent_query in u_name or u_name in agent_query:
+                                matched_user = u
+                                break
+                    if matched_user:
+                        resolved_agent_id = matched_user.get("user_id")
+                        resolved_agent_name = matched_user.get("user_name")
+                        logger.info("Resolved agent name to user_id: %s (ID: %s)", resolved_agent_name, resolved_agent_id)
+                except Exception:
+                    logger.exception("Error resolving agent user_id")
 
             # -------------------------------------------------------------
             # Step 3: Tool Execution
@@ -963,7 +1079,62 @@ class BillerQAgent:
                             bal = item.get("order_balance") or "0.00"
                             area = item.get("area_name") or "N/A"
                             lines.append(f"• **{cname.strip()}** (Sub ID: **{sub_id}**)\n  - **Dues:** **₹{bal}**\n  - **Area:** {area}")
+                        
+                        lines.append("\n📊 **Dues Metrics Summary:**")
+                        lines.append(f"- **Unpaid Customers Listed:** {min(5, total_count)} 🔴")
+                        lines.append(f"- **Total Outstanding Due:** **₹{format_curr(total_due)}**")
                         if total_count > 5:
+                            lines.append("\nFor the remaining, click the link below.")
+                        rule_based_response = "\n".join(lines)
+
+                # get_recurring_data
+                elif tool_name == "get_recurring_data":
+                    c_data = tool_result.get("data", {})
+                    items = []
+                    total = 0
+                    if isinstance(c_data, dict):
+                        items = c_data.get("data", [])
+                        total = c_data.get("total", len(items))
+                    elif isinstance(c_data, list):
+                        items = c_data
+                        total = len(items)
+                    
+                    # Apply local filtering by customer/subscriber ID
+                    filter_name = resolved_cust_name or customer_name_query
+                    if filter_name:
+                        filter_name_lower = str(filter_name).lower().strip()
+                        is_digit = filter_name_lower.isdigit()
+                        filtered = []
+                        for item in items:
+                            cust_val = str(item.get("customer_name") or item.get("customer") or "").lower()
+                            sub_val = str(item.get("subscriber_id") or "").lower()
+                            if filter_name_lower in cust_val or filter_name_lower in sub_val:
+                                filtered.append(item)
+                            elif is_digit and filter_name_lower in str(item.get("id", "")):
+                                filtered.append(item)
+                        items = filtered
+                        total = len(items)
+                    
+                    if not items:
+                        if filter_name:
+                            rule_based_response = f"No recurring invoice profiles found for '{filter_name}'."
+                        else:
+                            rule_based_response = "No recurring invoice profiles found."
+                    else:
+                        lines = [f"📊 **Recurring Invoices List ({total} total):**", ""]
+                        for item in items[:5]:
+                            cust = item.get("customer_name") or item.get("customer") or "Unknown"
+                            sub_id = item.get("subscriber_id") or "N/A"
+                            pkg = item.get("package_name") or "N/A"
+                            start = item.get("start_date") or "N/A"
+                            billing_type = item.get("type") or "Master"
+                            lines.append(f"• **{cust}** (Sub ID: **{sub_id}**)\n  - **Package:** {pkg}\n  - **Type:** {billing_type}\n  - **Start Date:** {start}")
+                        
+                        lines.append("\n📊 **Recurring Metrics Summary:**")
+                        lines.append(f"- **Recurring Profiles Listed:** {min(5, total)}")
+                        lines.append(f"- **Total Recurring Profiles:** {total}")
+                        
+                        if total > 5:
                             lines.append("\nFor the remaining, click the link below.")
                         rule_based_response = "\n".join(lines)
 
@@ -994,6 +1165,17 @@ class BillerQAgent:
                             method = item.get("payment_method") or item.get("method") or "N/A"
                             inv = item.get("invoice_no") or "N/A"
                             lines.append(f"• **{cname}** (Sub ID: **{sub_id}**)\n  - **Invoice:** {inv}\n  - **Amount:** **₹{amount}**\n  - **Method:** **{method}**\n  - **Date:** **{date}**")
+                        
+                        # Sum total amount of recent payments
+                        total_sum = 0.0
+                        for item in items:
+                            try:
+                                total_sum += float(str(item.get("amount") or item.get("paid_amount") or 0).replace(",", "").strip())
+                            except Exception:
+                                pass
+                        lines.append("\n📊 **Payments Metrics Summary:**")
+                        lines.append(f"- **Total Collected Amount:** **₹{format_curr(total_sum)}** 🟢")
+                        lines.append(f"- **Total Transactions:** {total}")
                         if total > 5:
                             lines.append("\nFor the remaining, click the link below.")
                         rule_based_response = "\n".join(lines)
@@ -1042,6 +1224,10 @@ class BillerQAgent:
                                     area = c.get("area_name") or c.get("billing_area") or c.get("area") or "N/A"
                                     balance = c.get("dues") or c.get("balance") or c.get("unpaid_amount") or 0
                                     lines.append(f"• **{cname.strip()}**\n  - **Unpaid Balance:** **₹{format_curr(balance)}**\n  - **Area:** {area}")
+                                
+                                lines.append("\n📊 **Unpaid Metrics Summary:**")
+                                lines.append(f"- **Unpaid Customers Listed:** {min(5, total_count)} 🔴")
+                                lines.append(f"- **Total Outstanding Balance:** **₹{format_curr(total_amount)}**")
                                 if len(customers) > 5:
                                     lines.append("\nFor the remaining, click the link below.")
                                 rule_based_response = "\n".join(lines)
@@ -1071,12 +1257,39 @@ class BillerQAgent:
                 # 6. complaint_status_count
                 elif tool_name == "complaint_status_count":
                     status_f = "open" if "open" in msg_lower else "in progress" if "progress" in msg_lower else "closed" if ("closed" in msg_lower or "resolved" in msg_lower) else None
-                    rule_based_response = await self._get_complaints_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_f)
+                    rule_based_response = await self._get_complaints_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_filter=status_f)
 
                 # 7. get_complaints
                 elif tool_name == "get_complaints":
                     status_f = tool_args.get("status") or ("open" if "open" in msg_lower else "in progress" if "progress" in msg_lower else "closed" if ("closed" in msg_lower or "resolved" in msg_lower) else None)
-                    rule_based_response = await self._get_complaints_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_f)
+                    cust_f = resolved_cust_name or customer_name_query
+                    
+                    # Extract problem type
+                    prob_f = None
+                    if "billing" in msg_lower:
+                        prob_f = "billing"
+                    elif "technical" in msg_lower:
+                        prob_f = "technical"
+                    elif "signal" in msg_lower:
+                        prob_f = "signal"
+                    elif "internet" in msg_lower:
+                        prob_f = "internet"
+                    
+                    # Extract area name
+                    area_f = None
+                    area_match = re.search(r"\b(?:area|place|location|in|at)\s+([a-zA-Z0-9\s]+)", msg_lower)
+                    if area_match:
+                        candidate_area = area_match.group(1).strip()
+                        if candidate_area and candidate_area not in blacklist_words:
+                            area_f = candidate_area
+                            
+                    rule_based_response = await self._get_complaints_dashboard_response(
+                        billerq_token, billerq_api_url, billerq_user_role,
+                        status_filter=status_f,
+                        customer_name_filter=cust_f,
+                        problem_type_filter=prob_f,
+                        area_filter=area_f
+                    )
 
                 # 8. get_dashboard_data
                 elif tool_name == "get_dashboard_data":
@@ -1258,6 +1471,18 @@ class BillerQAgent:
                             date = item.get("invoice_date") or item.get("created_date") or "N/A"
                             status = item.get("payment_status") or item.get("order_status") or "N/A"
                             lines.append(f"• **Invoice #{pref}{inv_no}** — **{cname}** (Sub ID: **{sub_id}**)\n  - **Amount:** {amount}\n  - **Status:** {status.upper()}\n  - **Date:** {date}")
+                        # Count statuses in items
+                        paid_cnt = sum(1 for x in items if str(x.get("payment_status") or x.get("order_status", "")).lower() == "paid")
+                        unpaid_cnt = sum(1 for x in items if str(x.get("payment_status") or x.get("order_status", "")).lower() in ("unpaid", "pending"))
+                        overdue_cnt = sum(1 for x in items if str(x.get("payment_status") or x.get("order_status", "")).lower() == "overdue")
+                        
+                        lines.append("\n📊 **Invoices Metrics Summary:**")
+                        lines.append(f"- **Paid Invoices:** {paid_cnt} 🟢")
+                        lines.append(f"- **Unpaid Invoices:** {unpaid_cnt} 🔴")
+                        if overdue_cnt > 0:
+                            lines.append(f"- **Overdue Invoices:** {overdue_cnt} ⚠️")
+                        lines.append(f"- **Total Listed:** {len(items)}")
+                        
                         if total > 5 or len(items) > 5:
                             lines.append("\nFor the remaining, click the link below.")
                         rule_based_response = "\n".join(lines)
@@ -1504,13 +1729,61 @@ class BillerQAgent:
                     payments = rep_data.get("payments", {})
                     payments_list = payments.get("data", []) if isinstance(payments, dict) else payments
                     total_amount = rep_data.get("total_amount", 0.0)
-                    if not payments_list:
-                        rule_based_response = "No agent payments reported."
+                    
+                    filter_agent = resolved_agent_name or customer_name_query
+                    if filter_agent:
+                        filter_agent_lower = str(filter_agent).lower().strip()
+                        filter_agent_lower = re.sub(r"\b(report|of|for|by|agent)\b", "", filter_agent_lower).strip()
                     else:
-                        lines = [f"Total Agent Collection: ₹{format_curr(total_amount)}", "Recent Agent collection logs:"]
-                        for item in payments_list[:5]:
-                            lines.append(f"• Invoice {item.get('invoice_no')}: ₹{item.get('collected_amount')} from {item.get('customer_name')} ({item.get('account_name')})")
-                        rule_based_response = "\n".join(lines)
+                        filter_agent_lower = None
+                        
+                    if filter_agent_lower:
+                        filtered_list = []
+                        filtered_total = 0.0
+                        for item in payments_list:
+                            item_agent = str(item.get("account_name", "")).lower()
+                            if filter_agent_lower in item_agent or item_agent in filter_agent_lower:
+                                filtered_list.append(item)
+                                try:
+                                    filtered_total += float(str(item.get("collected_amount", 0)).replace(",", "").strip())
+                                except Exception:
+                                    pass
+                        
+                        time_label = "This Month"
+                        if "last year" in msg_lower or "2025" in msg_lower:
+                            time_label = "Last Year (2025)"
+                        elif "this year" in msg_lower or "2026" in msg_lower:
+                            time_label = "This Year (2026)"
+                        elif "2024" in msg_lower:
+                            time_label = "2024"
+                            
+                        if not filtered_list:
+                            rule_based_response = f"No collection logs found for agent **{filter_agent}** for {time_label}."
+                        else:
+                            lines = [
+                                f"👤 **Collection Details for Agent:** **{filtered_list[0].get('account_name')}** ({time_label})",
+                                f"• Total Collection: **₹{self._format_curr(filtered_total)}**",
+                                "\n**Collection logs:**"
+                            ]
+                            for item in filtered_list[:5]:
+                                lines.append(f"• Invoice {item.get('invoice_no')}: **₹{item.get('collected_amount')}** from {item.get('customer_name')} on {item.get('paid_date')}")
+                            rule_based_response = "\n".join(lines)
+                    else:
+                        if not payments_list:
+                            rule_based_response = "No agent payments reported."
+                        else:
+                            time_label = "this month"
+                            if "last year" in msg_lower or "2025" in msg_lower:
+                                time_label = "last year (2025)"
+                            elif "this year" in msg_lower or "2026" in msg_lower:
+                                time_label = "this year (2026)"
+                            elif "2024" in msg_lower:
+                                time_label = "2024"
+                                
+                            lines = [f"Total Agent Collection ({time_label}): **₹{self._format_curr(total_amount)}**", "\n**Recent Agent collection logs:**"]
+                            for item in payments_list[:5]:
+                                lines.append(f"• Invoice {item.get('invoice_no')}: **₹{item.get('collected_amount')}** from {item.get('customer_name')} ({item.get('account_name')})")
+                            rule_based_response = "\n".join(lines)
 
                 # 26. get_expense_summary
                 elif tool_name == "get_expense_summary":
@@ -1926,7 +2199,7 @@ class BillerQAgent:
 
             if rule_based_response:
                 logger.info("Bypassing Formatter LLM — using rule-based response: '%s'", rule_based_response)
-                metadata = self._get_redirect_metadata(tool_name, resolved_cust_id, resolved_cust_name, message)
+                metadata = self._get_redirect_metadata(tool_name, resolved_cust_id, resolved_cust_name, message, resolved_agent_id=resolved_agent_id)
                 return rule_based_response, metadata
 
             formatter_system_prompt = FORMATTER_SYSTEM_PROMPT_TEMPLATE.format(current_date=current_date)
@@ -1963,7 +2236,7 @@ class BillerQAgent:
                 final_text = "I encountered an issue formatting the API response. Here is the raw information: " + data_str[:500]
 
             # Ensure that redirect button metadata matches the tool executed
-            metadata = self._get_redirect_metadata(tool_name, resolved_cust_id, resolved_cust_name, message)
+            metadata = self._get_redirect_metadata(tool_name, resolved_cust_id, resolved_cust_name, message, resolved_agent_id=resolved_agent_id)
             
             return final_text, metadata
         finally:
@@ -2004,7 +2277,7 @@ class BillerQAgent:
                 
         return {"tool": "none", "arguments": {}, "customer_name": None}
 
-    def _get_redirect_metadata(self, tool_name: str, resolved_cust_id: int = None, resolved_cust_name: str = None, message_str: str = "") -> dict:
+    def _get_redirect_metadata(self, tool_name: str, resolved_cust_id: int = None, resolved_cust_name: str = None, message_str: str = "", resolved_agent_id: int = None) -> dict:
         """Constructs redirection metadata for the frontend."""
         metadata = {}
         if resolved_cust_id:
@@ -2067,6 +2340,7 @@ class BillerQAgent:
             "get_categories": ("/settings/categories", "View categories"),
             "get_tax_classes": ("/settings/tax-class", "View tax classes"),
             "get_wallets": ("/customers/wallet", "View wallets"),
+            "get_recurring_data": ("/billing/recurring", "View recurring"),
         }
 
         # Dynamic overrides
@@ -2074,6 +2348,34 @@ class BillerQAgent:
             # If it's a collection query (either overall collections or agent collections), redirect to collection report
             if resolved_cust_name or resolved_cust_id or any(k in message_str.lower() for k in ["agent", "collection", "due"]):
                 tool_map["get_connection_data"] = ("/report/payment-collection", "View report")
+        elif tool_name == "get_agent_collection_report":
+            base_url = "/report/payment-collection"
+            params = []
+            msg_lower = message_str.lower()
+            start_date, end_date = None, None
+            if "last year" in msg_lower or "2025" in msg_lower:
+                start_date = "01-01-2025"
+                end_date = "31-12-2025"
+            elif "this year" in msg_lower or "2026" in msg_lower:
+                start_date = "01-01-2026"
+                end_date = "31-12-2026"
+            elif "2024" in msg_lower:
+                start_date = "01-01-2024"
+                end_date = "31-12-2024"
+                
+            if start_date and end_date:
+                params.append(f"start_date={start_date}")
+                params.append(f"end_date={end_date}")
+                
+            if resolved_agent_id:
+                params.append(f"user={resolved_agent_id}")
+                
+            if params:
+                redirect_url = f"{base_url}?{'&'.join(params)}"
+            else:
+                redirect_url = base_url
+                
+            tool_map["get_agent_collection_report"] = (redirect_url, "View report")
 
         url_label = tool_map.get(tool_name)
         if url_label:
@@ -2170,7 +2472,7 @@ class BillerQAgent:
 
         return "\n".join(lines)
 
-    async def _get_complaints_dashboard_response(self, billerq_token, billerq_api_url, billerq_user_role, status_filter=None):
+    async def _get_complaints_dashboard_response(self, billerq_token, billerq_api_url, billerq_user_role, status_filter=None, customer_name_filter=None, problem_type_filter=None, area_filter=None):
         try:
             counts_resp = await self._execute_tool("get_complaint_status_count", {}, billerq_token, billerq_api_url, billerq_user_role)
             counts_data = counts_resp.get("data") if isinstance(counts_resp, dict) else []
@@ -2197,14 +2499,8 @@ class BillerQAgent:
         if total_count == 0:
             total_count = open_count + in_progress_count + closed_count
 
-        args = {}
-        if status_filter:
-            args["status"] = status_filter
-        else:
-            args["status"] = "open"
-            
         try:
-            complaints_resp = await self._execute_tool("get_complaints", args, billerq_token, billerq_api_url, billerq_user_role)
+            complaints_resp = await self._execute_tool("get_complaints", {}, billerq_token, billerq_api_url, billerq_user_role)
             complaints_wrapper = complaints_resp.get("data", {}) if isinstance(complaints_resp, dict) else {}
             items = []
             if isinstance(complaints_wrapper, dict):
@@ -2213,6 +2509,48 @@ class BillerQAgent:
                 items = complaints_wrapper
         except Exception:
             items = []
+
+        # Local pre-filtering by customer, problem type, area
+        if customer_name_filter:
+            cust_lower = str(customer_name_filter).lower().strip()
+            is_digit = cust_lower.isdigit()
+            filtered = []
+            for item in items:
+                cname_val = str(item.get("customer_name") or item.get("name") or "").lower()
+                sub_val = str(item.get("subscriber_id") or "").lower()
+                phone_val = str(item.get("phone") or "").lower()
+                if cust_lower in cname_val or cust_lower in sub_val or cust_lower in phone_val:
+                    filtered.append(item)
+                elif is_digit and cust_lower in str(item.get("id", "")):
+                    filtered.append(item)
+            items = filtered
+
+        if problem_type_filter:
+            prob_lower = str(problem_type_filter).lower().strip()
+            items = [item for item in items if prob_lower in str(item.get("problem_type", "")).lower()]
+
+        if area_filter:
+            area_lower = str(area_filter).lower().strip()
+            items = [item for item in items if area_lower in str(item.get("area_name", "")).lower()]
+
+        # If filtered by customer/problem/area, recompute counts locally from this filtered subset
+        if customer_name_filter or problem_type_filter or area_filter:
+            open_count = sum(1 for item in items if str(item.get("status", "")).lower() == "open")
+            in_progress_count = sum(1 for item in items if "progress" in str(item.get("status", "")).lower())
+            closed_count = sum(1 for item in items if str(item.get("status", "")).lower() in ("closed", "resolved"))
+            total_count = len(items)
+
+        # Apply status filter
+        if status_filter:
+            status_lower = status_filter.lower().replace("-", " ").strip()
+            if status_lower in ("closed", "resolved"):
+                items = [item for item in items if str(item.get("status", "")).lower() in ("closed", "resolved")]
+            elif "progress" in status_lower:
+                items = [item for item in items if "progress" in str(item.get("status", "")).lower()]
+            elif status_lower == "open":
+                items = [item for item in items if str(item.get("status", "")).lower() == "open"]
+            else:
+                items = [item for item in items if status_lower in str(item.get("status", "")).lower()]
 
         target_status = status_filter.upper() if status_filter else "OPEN"
         lines = []
@@ -2231,13 +2569,6 @@ class BillerQAgent:
                 lines.append(f"• **Complaint #{comp_no}** — **{cname}**\n  - **Status:** {status.upper()}\n  - **Problem Type:** {prob}\n  - **Date:** {date}")
 
         list_total = len(items)
-        if target_status == "OPEN" and open_count > 0:
-            list_total = open_count
-        elif "PROGRESS" in target_status and in_progress_count > 0:
-            list_total = in_progress_count
-        elif target_status in ("CLOSED", "RESOLVED") and closed_count > 0:
-            list_total = closed_count
-
         if list_total > 5:
             lines.append("\nFor the remaining, click the link below.")
 
@@ -2488,6 +2819,14 @@ class BillerQAgent:
 
         func = TOOL_MAP.get(name)
         if not func:
+            from api.registry import API_REGISTRY
+            if name in API_REGISTRY:
+                logger.info("Tool '%s' not found in TOOL_MAP. Executing dynamically via API_REGISTRY.", name)
+                try:
+                    return await api_client.get(name, params=arguments)
+                except Exception as e:
+                    logger.exception("Dynamic GET request failed for key %s", name)
+                    return {"error": f"Dynamic endpoint call failed: {str(e)}"}
             return {"error": f"Tool '{name}' is not supported."}
 
         try:

@@ -22,6 +22,7 @@ SIMPLE_FORMAT_INTENTS = {
     "UNPAID_CUSTOMERS",
     "OVERDUE",
     "COMPLAINTS",
+    "RECURRING",
     "ANALYTICS",
     "REPORT",
 }
@@ -208,7 +209,7 @@ class Formatter:
 
                         extra = []
                         # include date/amount snippet if available
-                        for k in (sort_key, "amount", "outstanding", "days_overdue"):
+                        for k in (sort_key, "amount", "outstanding", "days_overdue", "status", "problem_type", "package_name", "type", "start_date"):
                             if k and isinstance(item.get(k), (str, int, float)) and item.get(k):
                                 extra.append(f"{k}: {item.get(k)}")
 

@@ -6,12 +6,16 @@
         let token = null;
         let apiUrl = null;
         let userRole = null;
+        let userName = null;
         try {
             const profileStr = localStorage.getItem('auth0_profile');
             if (profileStr) {
                 const profileData = JSON.parse(profileStr);
-                if (profileData && profileData.apiUrl) {
-                    apiUrl = profileData.apiUrl;
+                if (profileData) {
+                    if (profileData.apiUrl) apiUrl = profileData.apiUrl;
+                    if (profileData.name || profileData.nickname) {
+                        userName = profileData.name || profileData.nickname;
+                    }
                 }
             }
         } catch(e) {
@@ -29,6 +33,7 @@
                             const loginData = JSON.parse(decrypted);
                             if (loginData && loginData.userToken) {
                                 token = loginData.userToken;
+                                userName = loginData.userName || loginData.name || loginData.username || userName;
                                 userRole = loginData.userType !== undefined ? loginData.userType : 
                                            (loginData.userRole !== undefined ? loginData.userRole : loginData.role);
                                 
@@ -56,10 +61,14 @@
         } catch(e) {
             console.error("BillerQ AI integration error:", e);
         }
-        return { token, apiUrl, userRole };
+        return { token, apiUrl, userRole, userName };
     }
 
     let lastTokenValue = null;
+
+    let isDragging = false;
+    let startLeft = 0;
+    let startTop = 0;
 
     window.addEventListener('message', (event) => {
         const iframe = document.getElementById('billerq-ai-iframe');
@@ -73,11 +82,41 @@
         } else if (event.data && event.data.type === 'toggle-chat') {
             if (event.data.open) {
                 container.style.width = '450px';
-                container.style.height = '750px';
+                container.style.height = 'calc(100vh - 20px)';
             } else {
                 container.style.width = '120px';
                 container.style.height = '120px';
             }
+        } else if (event.data && event.data.type === 'drag-start') {
+            isDragging = true;
+            const rect = container.getBoundingClientRect();
+            startLeft = rect.left;
+            startTop = rect.top;
+            iframe.style.pointerEvents = 'none';
+        } else if (event.data && event.data.type === 'drag-move' && isDragging) {
+            const newLeft = startLeft + event.data.dx;
+            const newTop = startTop + event.data.dy;
+            
+            const minX = 10;
+            const maxX = window.innerWidth - container.offsetWidth - 10;
+            const minY = 10;
+            const maxY = window.innerHeight - container.offsetHeight - 10;
+            
+            const clampedLeft = Math.max(minX, Math.min(maxX, newLeft));
+            const clampedTop = Math.max(minY, Math.min(maxY, newTop));
+            
+            container.style.left = clampedLeft + 'px';
+            container.style.top = clampedTop + 'px';
+            container.style.right = 'auto';
+            container.style.bottom = 'auto';
+        } else if (event.data && event.data.type === 'drag-end') {
+            isDragging = false;
+            iframe.style.pointerEvents = 'auto';
+        } else if (event.data && event.data.type === 'reset-widget') {
+            container.style.left = 'auto';
+            container.style.top = 'auto';
+            container.style.right = '0';
+            container.style.bottom = '0';
         }
     });
 
