@@ -101,38 +101,7 @@
         /* ============================================================
            Drag Handle Grips
            ============================================================ */
-        .toggle-drag-handle {
-            position: absolute;
-            top: -10px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #2b2b3d;
-            border: 1px solid var(--border);
-            color: var(--text-muted);
-            width: 28px;
-            height: 16px;
-            border-radius: 8px 8px 0 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: grab;
-            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
-            z-index: 100000;
-            transition: background 0.2s, color 0.2s;
-        }
-        #billerq-chat-toggle.open .toggle-drag-handle {
-            display: none;
-        }
-        .toggle-drag-handle:hover {
-            background: var(--bg-card);
-            color: var(--text-primary);
-        }
-        .toggle-drag-handle svg {
-            width: 10px;
-            height: 10px;
-            fill: currentColor;
-            transform: rotate(90deg);
-        }
+
 
         .header-drag-handle {
             display: flex;
@@ -1397,14 +1366,13 @@
 <body>
     <!-- Toggle Button -->
     <button id="billerq-chat-toggle" aria-label="Open AI Assistant">
-        <div class="toggle-drag-handle" id="toggleDragHandle" title="Hold and drag to move">
-            <svg viewBox="0 0 24 24"><path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-        </div>
-        <svg class="icon-chat" viewBox="0 0 24 24">
-            <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.2L4 17.2V4h16v12z"/>
-            <circle cx="8" cy="10" r="1.2"/>
-            <circle cx="12" cy="10" r="1.2"/>
-            <circle cx="16" cy="10" r="1.2"/>
+
+        <svg class="icon-chat" viewBox="0 0 512 512">
+            <g>
+                <path style="fill: #ffffff;" d="M108.8,342.6c-28.8,0-52.2-23.4-52.2-52.2V78c0-28.8,23.4-52.2,52.2-52.2S161,49.1,161,78v212.5C161,319.3,137.6,342.6,108.8,342.6z"/>
+                <path style="fill: #ffffff;" d="M250.7,487c-106.9,0-193.8-87-193.8-193.8s87-193.8,193.8-193.8s193.8,87,193.8,193.8S357.5,487,250.7,487z M250.7,203.7c-49.3,0-89.5,40.1-89.5,89.5s40.1,89.5,89.5,89.5s89.5-40.1,89.5-89.5S300,203.7,250.7,203.7z"/>
+                <circle style="fill: #F15A24;" cx="392.1" cy="431.8" r="52.2"/>
+            </g>
         </svg>
         <svg class="icon-close" viewBox="0 0 24 24">
             <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
@@ -2139,30 +2107,14 @@
             }
         }
 
-        const toggleDragHandle = document.getElementById('toggleDragHandle');
+
         const headerDragHandle = document.getElementById('headerDragHandle');
 
         if (localStorage.getItem('billerq_widget_moved') === 'true') {
             if (resetPositionBtn) resetPositionBtn.classList.add('visible');
         }
 
-        if (toggleDragHandle) {
-            makeDraggable(toggleDragHandle,
-                () => window.parent.postMessage({ type: 'drag-start' }, '*'),
-                (dx, dy) => {
-                    localStorage.setItem('billerq_widget_moved', 'true');
-                    if (resetPositionBtn) resetPositionBtn.classList.add('visible');
-                    window.parent.postMessage({ type: 'drag-move', dx: dx, dy: dy }, '*');
-                },
-                (hasMoved) => {
-                    window.parent.postMessage({ type: 'drag-end' }, '*');
-                    if (hasMoved) {
-                        toggle.setAttribute('data-dragged', 'true');
-                        setTimeout(() => toggle.removeAttribute('data-dragged'), 80);
-                    }
-                }
-            );
-        }
+
 
         if (headerDragHandle) {
             makeDraggable(headerDragHandle,
