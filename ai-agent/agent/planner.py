@@ -46,6 +46,7 @@ VALID_INTENTS = {
     "RECURRING",
     "OVERDUE",
     "STB_INFO",
+    "GUIDE",
     "UNKNOWN",
 }
 
@@ -120,6 +121,24 @@ class Planner:
     def _fast_plan(self, message: str) -> dict:
         """Quick regex-based classification for common queries."""
         text = message.strip().lower()
+
+        if re.search(r"\b(guide|how to|where is|tell me about|what is|how do i|help)\b", text):
+            category = "billerq"
+            if "customer" in text:
+                category = "customer"
+            elif "payment" in text:
+                category = "payment"
+            elif "invoice" in text or "bill" in text:
+                category = "invoice"
+            elif "subscription" in text:
+                category = "subscription"
+            elif "complaint" in text:
+                category = "complaint"
+            elif "report" in text:
+                category = "report"
+            elif "chatbot" in text:
+                category = "chatbot"
+            return {"intent": "GUIDE", "entities": {"customer_name": category}, "uses_context": False, "confidence": 0.95}
 
         if re.search(r"\b(active customers|how many active customers|active customer)\b", text):
             return {"intent": "ACTIVE_CUSTOMERS", "entities": {}, "uses_context": False, "confidence": 0.9}

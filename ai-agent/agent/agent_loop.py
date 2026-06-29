@@ -357,6 +357,26 @@ class BillerQAgent:
             
             fast_result = None
 
+            # Check for guide / help / tutorial requests first (highest priority)
+            is_guide_query = any(kw in msg_lower for kw in ("guide", "how to", "where is", "help me with", "tell me about", "what is", "how do i", "tutorial", "help"))
+            if is_guide_query:
+                category = "billerq"
+                if "cust" in msg_lower or "coudt" in msg_lower or "subscr" in msg_lower:
+                    category = "customer"
+                elif "payment" in msg_lower or "collect" in msg_lower:
+                    category = "payment"
+                elif "invoice" in msg_lower or "bill" in msg_lower.replace("billerq", ""):
+                    category = "invoice"
+                elif "subscription" in msg_lower or "renew" in msg_lower:
+                    category = "subscription"
+                elif "complaint" in msg_lower or "ticket" in msg_lower or "problem" in msg_lower:
+                    category = "complaint"
+                elif "report" in msg_lower or "export" in msg_lower:
+                    category = "report"
+                elif "chatbot" in msg_lower or "voice" in msg_lower:
+                    category = "chatbot"
+                fast_result = {"tool": "show_guide", "arguments": {"category": category}, "customer_name": category}
+
             # Fast routing rules
             months_map = {
                 "january": "Jan", "february": "Feb", "march": "Mar", "april": "Apr", "may": "May", "june": "Jun",
@@ -571,7 +591,9 @@ class BillerQAgent:
                 logger.info("Bypassing Formatter LLM — using rule-based response: '%s'", comparison_text[:80])
                 return comparison_text, meta
 
-            if "recurring" in msg_lower:
+            if fast_result is not None:
+                pass
+            elif "recurring" in msg_lower:
                 fast_result = {"tool": "get_recurring_data", "arguments": {}, "customer_name": name_extracted}
             elif agent_col_match:
                 raw_agent_name = agent_col_match.group(1).strip()
@@ -727,7 +749,9 @@ class BillerQAgent:
                 fast_result = {"tool": "get_stb_status_count", "arguments": {}, "customer_name": None}
             elif "show stb" in msg_lower or "show stbs" in msg_lower or "list stb" in msg_lower or "list stbs" in msg_lower or "view stb" in msg_lower or "view stbs" in msg_lower or "available stb" in msg_lower or "available stbs" in msg_lower or "set top box" in msg_lower or "set top boxes" in msg_lower:
                 fast_result = {"tool": "get_stbs", "arguments": {}, "customer_name": None}
-            elif "invoice" in msg_lower or "order" in msg_lower or "bill" in msg_lower:
+            # Remove 'billerq' from text to avoid false positives matching 'bill'
+            temp_msg_no_app = msg_lower.replace("billerq", "")
+            if "invoice" in msg_lower or "order" in msg_lower or "bill" in temp_msg_no_app:
                 fast_result = {"tool": "get_invoices", "arguments": {}, "customer_name": None}
 
             if fast_result:
@@ -958,12 +982,15 @@ class BillerQAgent:
             # -------------------------------------------------------------
             tool_result = None
             if tool_name and tool_name != "none":
-                logger.info("Executing tool: %s with args: %s", tool_name, tool_args)
-                try:
-                    tool_result = await self._execute_tool(tool_name, tool_args, billerq_token, billerq_api_url, billerq_user_role)
-                except Exception as e:
-                    logger.exception("Tool execution failed")
-                    tool_result = {"error": f"Failed to execute tool: {str(e)}"}
+                if tool_name == "show_guide":
+                    tool_result = {"status": "success", "category": tool_args.get("category", "billerq")}
+                else:
+                    logger.info("Executing tool: %s with args: %s", tool_name, tool_args)
+                    try:
+                        tool_result = await self._execute_tool(tool_name, tool_args, billerq_token, billerq_api_url, billerq_user_role)
+                    except Exception as e:
+                        logger.exception("Tool execution failed")
+                        tool_result = {"error": f"Failed to execute tool: {str(e)}"}
                     
             logger.info("Tool execution complete. Result data size/type: %s", type(tool_result))
 
@@ -974,6 +1001,9 @@ class BillerQAgent:
             rule_based_response = None
             if tool_name == "none":
                 rule_based_response = await self._get_fallback_dashboard_response(billerq_token, billerq_api_url, billerq_user_role)
+            elif tool_name == "show_guide":
+                category = tool_args.get("category", "billerq")
+                rule_based_response = self._get_guide_response(category)
             elif isinstance(tool_result, dict):
                 if "error" in tool_result:
                     err_msg = tool_result["error"]
@@ -2345,6 +2375,14 @@ class BillerQAgent:
             "get_tax_classes": ("/settings/tax-class", "View tax classes"),
             "get_wallets": ("/customers/wallet", "View wallets"),
             "get_recurring_data": ("/billing/recurring", "View recurring"),
+            "show_guide": (
+                ("/customers/customer", "Open Customers") if resolved_cust_name == "customer" else
+                ("/complaints", "Open Complaints") if resolved_cust_name == "complaint" else
+                ("/billing/invoice", "Open Invoices") if resolved_cust_name == "invoice" else
+                ("/billing/subscription", "Open Subscriptions") if resolved_cust_name == "subscription" else
+                ("/report/unpaid-customer", "Open Reports") if resolved_cust_name == "report" else
+                ("/dashboard/default", "Open Dashboard")
+            )
         }
 
         # Dynamic overrides
@@ -2634,6 +2672,115 @@ class BillerQAgent:
             f"- **Resolved:** {comp.get('resolved', 0)} 🟢"
         ]
         return "\n".join(lines)
+
+    def _get_guide_response(self, category: str) -> str:
+        """Returns step-by-step instructions for BillerQ core modules."""
+        guides = {
+            "customer": (
+                "👤 **Guide: How to Add a Customer**\n\n"
+                "**Step 1: Go to Customers**\n"
+                "  - Click **Customers** in the left sidebar, then select **Customer** from the submenu.\n"
+                "**Step 2: Click 'Add'**\n"
+                "  - Click the **Add** button at the top-right corner of the customer list page.\n"
+                "**Step 3: Fill in Details**\n"
+                "  - Enter the required fields: **First Name**, **Last Name**, **Mobile Number**, and **Area**.\n"
+                "**Step 4: Set Subscriber ID**\n"
+                "  - The system will auto-generate a Subscriber ID, or you can key in a custom one (e.g., CUST-01).\n"
+                "**Step 5: Choose a Package**\n"
+                "  - Select the subscriber's base subscription plan from the **Package** dropdown.\n"
+                "**Step 6: Save**\n"
+                "  - Click **Save** or **Submit**. The subscriber is registered and will show up in the customer list immediately."
+            ),
+            "payment": (
+                "💳 **Guide: How to Record a Payment**\n\n"
+                "**Step 1: Locate the Customer**\n"
+                "  - Open **Customers → Customer** and search for them by name, phone, or subscriber ID.\n"
+                "**Step 2: Open Profile**\n"
+                "  - Click on their **Subscriber ID** link to open their details page.\n"
+                "**Step 3: Go to Billing Tab**\n"
+                "  - Click on the **Billing** or **Payments** tab within their profile.\n"
+                "**Step 4: Click 'Collect Payment'**\n"
+                "  - Click the **Collect Payment** button to launch the receipt form.\n"
+                "**Step 5: Enter Details**\n"
+                "  - Key in the **amount** and select the payment channel: **Cash, UPI, Card, or Bank Transfer**.\n"
+                "**Step 6: Save & Send Receipt**\n"
+                "  - Click **Confirm** or **Save**. The payment is recorded and you can send a receipt copy via SMS/WhatsApp."
+            ),
+            "invoice": (
+                "🧾 **Guide: How to Create an Invoice**\n\n"
+                "**Step 1: Open Billing**\n"
+                "  - Click **Billing** in the left sidebar.\n"
+                "**Step 2: Click 'New Invoice'**\n"
+                "  - Click the **Add Invoice** or **+ New** button at the top right.\n"
+                "**Step 3: Select Subscriber**\n"
+                "  - Search and select the **customer** you wish to bill.\n"
+                "**Step 4: Add Line Items**\n"
+                "  - Add the target **service/package** as a line item. Adjust the quantity and rate.\n"
+                "**Step 5: Set Due Date**\n"
+                "  - Choose the payment **due date** and write any terms or descriptions.\n"
+                "**Step 6: Save & Send**\n"
+                "  - Click **Save** to store, or **Send** to deliver it directly via email/WhatsApp."
+            ),
+            "subscription": (
+                "📦 **Guide: How to Manage Subscriptions**\n\n"
+                "**Step 1: Open Customer Profile**\n"
+                "  - Go to **Customers → Customer** and click on their **Subscriber ID**.\n"
+                "**Step 2: Go to Subscriptions Tab**\n"
+                "  - Click the **STB/Modem** or **Subscription** tab inside the profile.\n"
+                "**Step 3: Activate a Plan**\n"
+                "  - Click **Add Subscription**, select the package, set the **start date**, and click Save.\n"
+                "**Step 4: Renew a Subscription**\n"
+                "  - Locate the expiring subscription and click **Renew**. Select duration and confirm.\n"
+                "**Step 5: Cancel/Deactivate**\n"
+                "  - Click the **Deactivate** or **Cancel** button next to their subscription."
+            ),
+            "complaint": (
+                "🛠️ **Guide: How to Log and Track Complaints**\n\n"
+                "**Step 1: Go to Complaints**\n"
+                "  - Click **Complaints** in the left sidebar.\n"
+                "**Step 2: Add New Ticket**\n"
+                "  - Click **+ Add** or **New Complaint**.\n"
+                "**Step 3: Select Subscriber**\n"
+                "  - Search and select the target **customer** reporting the issue.\n"
+                "**Step 4: Select Problem Type**\n"
+                "  - Select the category (e.g., STB Issue, Broadband, Billing, Signal Not Found).\n"
+                "**Step 5: Assign & Describe**\n"
+                "  - Write a brief description and optionally assign it to a technician/staff member.\n"
+                "**Step 6: Save**\n"
+                "  - Click **Save**. The ticket status will initialize as OPEN. Track it in the complaints listing."
+            ),
+            "report": (
+                "📊 **Guide: How to View and Export Reports**\n\n"
+                "**Step 1: Go to Reports**\n"
+                "  - Click **Reports** in the left sidebar.\n"
+                "**Step 2: Choose Report**\n"
+                "  - Select from: **Collection, Payment Due, Wallet, Package**, etc.\n"
+                "**Step 3: Choose Dates & Filters**\n"
+                "  - Set the date range and select options (e.g. Area, Agent, Package) to filter details.\n"
+                "**Step 4: Export Data**\n"
+                "  - Click the **Export** button to save the sheet as **Excel** or **PDF**."
+            ),
+            "chatbot": (
+                "🤖 **Guide: How to Use the AI Chatbot**\n\n"
+                "• **Voice Input:** Tap the 🎙️ mic button and speak. It detects silence, stops, and submits your query.\n"
+                "• **Fast Queries:** Click the ☰ button on the input bar to list top reports.\n"
+                "• **Pronoun Recall:** Ask \"Show me Jinto Joseph\", then ask \"what is his mobile?\" or \"show his bills\" — the AI remembers Jinto.\n"
+                "• **Side-by-Side Comparisons:** Ask **\"Compare Joy P and Advaith\"** to generate a visual comparison table."
+            ),
+            "billerq": (
+                "ℹ️ **About BillerQ**\n\n"
+                "**BillerQ** is an all-in-one Cable TV, Broadband, and subscription management application designed to simplify billing, customer management, and agent collections.\n\n"
+                "**Key Sections:**\n"
+                "1. **Dashboard** — Live connection totals, collection meters, and complaint status.\n"
+                "2. **Customers** — Register subscribers, manage profiles, and assign STBs.\n"
+                "3. **Billing** — Generating invoices, recording payments, and tracking dues.\n"
+                "4. **Services/Products** — Package plans, addons, and item inventories.\n"
+                "5. **Complaints** — Creating tickets, assigning staff, and tracking status.\n"
+                "6. **Reports** — Collection logs, wallet summaries, and tax reports.\n\n"
+                "Feel free to ask me anything like *\"how do I add a customer\"* or *\"where are complaints\"*, and I will display the step-by-step tutorial!"
+            )
+        }
+        return guides.get(category, guides["billerq"])
 
     async def _get_stb_dashboard_response(self, billerq_token, billerq_api_url, billerq_user_role, status_filter=None):
         try:

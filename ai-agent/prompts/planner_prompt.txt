@@ -29,6 +29,7 @@ Your ONLY job is to analyze the user's message and output a structured JSON plan
 - RECURRING — Show recurring billing profiles or recurring invoices list (e.g., "show recurring", "list recurring customer profiles", "recurring invoice list")
 - OVERDUE — Show overdue payments or overdue customers
 - STB_INFO — Set-top box information for a customer
+- GUIDE — Help, how-to, tutorial, or informational questions about how to use BillerQ or modules (e.g., "how to add a customer", "how to record payment", "where is complaints", "tell me about billerq", "how to use chatbot", "how to create invoices")
 - UNKNOWN — Cannot determine intent, needs clarification
 
 ## Entity Extraction
@@ -123,10 +124,24 @@ User: "show me some of the customers"
 {"intent": "CUSTOMER_SEARCH", "entities": {"customer_name": null, "customer_names": null, "area_name": null, "report_type": null, "mobile": null}, "uses_context": false, "confidence": 0.95}
 ```
 
-User: "show top 5 customer names"
+User: "show customer names"
 ```json
 {"intent": "CUSTOMER_SEARCH", "entities": {"customer_name": null, "customer_names": null, "area_name": null, "report_type": null, "mobile": null}, "uses_context": false, "confidence": 0.95}
 ```
 
-Now analyze the following user message and output ONLY a JSON plan:
+User: "how do I add a new customer?"
+```json
+{"intent": "GUIDE", "entities": {"customer_name": "customer", "customer_names": null, "area_name": null, "report_type": null, "mobile": null}, "uses_context": false, "confidence": 0.95}
+```
 
+User: "tell me about billerq"
+```json
+{"intent": "GUIDE", "entities": {"customer_name": "billerq", "customer_names": null, "area_name": null, "report_type": null, "mobile": null}, "uses_context": false, "confidence": 0.95}
+```
+
+User: "where are complaints located?"
+```json
+{"intent": "GUIDE", "entities": {"customer_name": "complaints", "customer_names": null, "area_name": null, "report_type": null, "mobile": null}, "uses_context": false, "confidence": 0.95}
+```
+
+Now analyze the following user message and output ONLY a JSON plan:
