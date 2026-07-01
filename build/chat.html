@@ -1,0 +1,3035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BillerQ AI Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        /* ============================================================
+           CSS Variables & Reset
+           ============================================================ */
+        :root {
+            --primary: #6C5CE7;
+            --primary-dark: #5A4BD1;
+            --primary-light: #A29BFE;
+            --primary-glow: rgba(108, 92, 231, 0.35);
+            --bg-dark: #0F0E17;
+            --bg-card: #1A1926;
+            --bg-input: #232136;
+            --bg-message-user: linear-gradient(135deg, #6C5CE7 0%, #A29BFE 100%);
+            --bg-message-bot: #232136;
+            --text-primary: #FFFFFE;
+            --text-secondary: #94A1B2;
+            --text-muted: #72768A;
+            --border: rgba(255, 255, 255, 0.06);
+            --success: #2CB67D;
+            --warning: #FF8906;
+            --error: #E53170;
+            --shadow-lg: 0 25px 60px rgba(0, 0, 0, 0.5);
+            --shadow-glow: 0 0 40px var(--primary-glow);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --radius-pill: 24px;
+            --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* ============================================================
+           Floating Toggle Button
+           ============================================================ */
+        #billerq-chat-toggle {
+            position: fixed;
+            bottom: 28px;
+            right: 28px;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6C5CE7, #A29BFE);
+            border: none;
+            cursor: pointer;
+            z-index: 99999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow-glow), 0 8px 32px rgba(108, 92, 231, 0.4);
+            transition: var(--transition);
+            animation: pulse-ring 2.5s ease-out infinite;
+        }
+
+        #billerq-chat-toggle:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 60px var(--primary-glow), 0 12px 40px rgba(108, 92, 231, 0.5);
+        }
+
+        #billerq-chat-toggle:active {
+            transform: scale(0.95);
+        }
+
+        #billerq-chat-toggle svg {
+            width: 28px;
+            height: 28px;
+            fill: #fff;
+            transition: var(--transition);
+        }
+
+        #billerq-chat-toggle.open svg.icon-chat {
+            display: none;
+        }
+
+        #billerq-chat-toggle.open svg.icon-close {
+            display: block;
+        }
+
+        #billerq-chat-toggle:not(.open) svg.icon-close {
+            display: none;
+        }
+
+        @keyframes pulse-ring {
+            0% { box-shadow: var(--shadow-glow), 0 8px 32px rgba(108, 92, 231, 0.4); }
+            50% { box-shadow: 0 0 50px rgba(108, 92, 231, 0.5), 0 8px 32px rgba(108, 92, 231, 0.5); }
+            100% { box-shadow: var(--shadow-glow), 0 8px 32px rgba(108, 92, 231, 0.4); }
+        }
+
+        /* ============================================================
+           Drag Handle Grips
+           ============================================================ */
+
+
+        .header-drag-handle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            cursor: grab;
+            padding: 4px;
+            border-radius: 6px;
+            transition: background 0.2s, color 0.2s;
+            flex-shrink: 0;
+            margin-right: -4px;
+        }
+        .header-drag-handle:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-primary);
+        }
+        .header-drag-handle:active {
+            cursor: grabbing;
+        }
+        .header-drag-handle svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+
+        /* ============================================================
+           Chat Window Container
+           ============================================================ */
+        #billerq-chat-window {
+            position: fixed;
+            bottom: 108px;
+            right: 28px;
+            width: 420px;
+            height: 85vh;
+            max-height: calc(100vh - 90px);
+            background: var(--bg-dark);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            /* shadow removed */
+            z-index: 99998;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(20px) scale(0.95);
+            pointer-events: none;
+            transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                        transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        #billerq-chat-window.visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            pointer-events: all;
+        }
+
+        /* ============================================================
+           Header
+           ============================================================ */
+        .chat-header {
+            background: linear-gradient(135deg, rgba(108, 92, 231, 0.15), rgba(162, 155, 254, 0.08));
+            backdrop-filter: blur(20px);
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-shrink: 0;
+        }
+
+        .chat-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        /* Guide + Contact grouped row */
+        .header-column-actions {
+            display: flex;
+            flex-direction: row;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .chat-header-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #6C5CE7, #A29BFE);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+            box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3);
+        }
+
+        .chat-header-info {
+            flex: 1;
+        }
+
+        .chat-header-title {
+            font-family: var(--font);
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+        }
+
+        .chat-header-status {
+            font-family: var(--font);
+            font-size: 12px;
+            color: var(--success);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 2px;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: blink 2s ease-in-out infinite;
+        }
+
+        .auth-warning {
+            padding: 14px 18px;
+            border-radius: var(--radius-sm);
+            margin: 0 20px 16px;
+            background: rgba(229, 102, 102, 0.12);
+            color: #ffb3b3;
+            border: 1px solid rgba(229, 102, 102, 0.25);
+            font-family: var(--font);
+            font-size: 13px;
+            line-height: 1.5;
+            display: none;
+        }
+
+        #billerq-chat-toggle:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ============================================================
+           Messages Area
+           ============================================================ */
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            scroll-behavior: smooth;
+        }
+
+        .chat-messages::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        /* Message Bubbles */
+        .message {
+            display: flex;
+            gap: 10px;
+            max-width: 88%;
+            animation: messageIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes messageIn {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .message.bot {
+            align-self: flex-start;
+        }
+
+        .message-bubble {
+            padding: 14px 18px;
+            border-radius: var(--radius);
+            font-family: var(--font);
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .message.user .message-bubble {
+            background: var(--bg-message-user);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.bot .message-bubble {
+            background: var(--bg-message-bot);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-time {
+            font-family: var(--font);
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 6px;
+            text-align: right;
+        }
+
+        .message.bot .message-time {
+            text-align: left;
+        }
+
+        .bot-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #6C5CE7, #A29BFE);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        /* Typing Indicator */
+        .typing-indicator {
+            display: flex;
+            gap: 10px;
+            align-self: flex-start;
+            max-width: 88%;
+        }
+
+        .typing-dots {
+            padding: 16px 22px;
+            border-radius: var(--radius);
+            background: var(--bg-message-bot);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .typing-dots span {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            animation: dotBounce 1.4s ease-in-out infinite;
+        }
+
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes dotBounce {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+            30% { transform: translateY(-6px); opacity: 1; }
+        }
+
+        /* Welcome Message */
+        .welcome-message {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .welcome-emoji {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+
+        .welcome-title {
+            font-family: var(--font);
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .welcome-subtitle {
+            font-family: var(--font);
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 0 20px 16px;
+            flex-shrink: 0;
+        }
+
+        .quick-action-btn {
+            padding: 8px 14px;
+            border-radius: var(--radius-pill);
+            border: 1px solid var(--border);
+            background: rgba(108, 92, 231, 0.08);
+            color: var(--primary-light);
+            font-family: var(--font);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+
+        .quick-action-btn:hover {
+            background: rgba(108, 92, 231, 0.2);
+            border-color: var(--primary);
+            transform: translateY(-1px);
+        }
+
+        /* ============================================================
+           Input Area
+           ============================================================ */
+        .chat-input-area {
+            padding: 16px 20px 20px;
+            border-top: 1px solid var(--border);
+            background: rgba(15, 14, 23, 0.8);
+            backdrop-filter: blur(10px);
+            flex-shrink: 0;
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-input);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            padding: 4px 6px 4px 10px;
+            transition: var(--transition);
+            /* Fixed height so buttons never jump */
+            min-height: 52px;
+        }
+
+        .chat-input-wrapper:focus-within {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.15);
+        }
+
+        .chat-input-wrapper input {
+            flex: 1;
+            min-width: 0;       /* prevent flex overflow */
+            border: none;
+            outline: none;
+            background: transparent;
+            color: var(--text-primary);
+            font-family: var(--font);
+            font-size: 14px;
+            padding: 8px 0;
+        }
+
+        .chat-input-wrapper input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .send-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-sm);
+            border: none;
+            background: linear-gradient(135deg, #6C5CE7, #A29BFE);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+            flex-shrink: 0;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(108, 92, 231, 0.4);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .send-btn svg {
+            width: 18px;
+            height: 18px;
+            fill: #fff;
+        }
+
+        /* Microphone Button */
+        .mic-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-sm);
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+            flex-shrink: 0;
+        }
+
+        .mic-btn:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .mic-btn.recording {
+            background: var(--error);
+            animation: mic-pulse 1.5s infinite;
+        }
+
+        .mic-btn.recording svg {
+            fill: #fff;
+        }
+
+        @keyframes mic-pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(229, 49, 112, 0.6); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(229, 49, 112, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(229, 49, 112, 0); }
+        }
+
+        .mic-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: var(--text-secondary);
+        }
+
+        /* Typing Status Text */
+        .typing-status {
+            font-family: var(--font);
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-left: 10px;
+            align-self: center;
+        }
+
+        /* Redirect Button CSS */
+        .redirect-container {
+            margin-top: 10px;
+            display: flex;
+            justify-content: flex-start;
+        }
+
+        .redirect-btn {
+            background: linear-gradient(135deg, rgba(108, 92, 231, 0.15), rgba(162, 155, 254, 0.15));
+            border: 1px solid rgba(108, 92, 231, 0.4);
+            border-radius: var(--radius-sm);
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .redirect-btn:hover {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            border-color: var(--primary);
+            box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .redirect-link {
+            color: var(--primary-light);
+            text-decoration: none;
+            font-family: var(--font);
+            font-size: 13px;
+            font-weight: 600;
+            display: block;
+            width: 100%;
+            transition: var(--transition);
+        }
+
+        .redirect-btn:hover .redirect-link {
+            color: #fff;
+        }
+
+        /* ============================================================
+           Responsive
+           ============================================================ */
+        @media (max-width: 400px) {
+            #billerq-chat-window {
+                bottom: 0;
+                right: 0;
+                width: 100%;
+                height: 100%;
+                max-height: 100vh;
+                border-radius: 0;
+            }
+
+            #billerq-chat-toggle {
+                bottom: 20px;
+                right: 20px;
+            }
+
+            .chat-input-wrapper {
+                margin-right: 76px;
+            }
+        }
+
+        /* ============================================================
+           Comparison Table Styles
+           ============================================================ */
+        .compare-table-wrap {
+            overflow-x: auto;
+            margin: 8px 0 4px 0;
+            border-radius: 10px;
+        }
+        .compare-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12.5px;
+            min-width: 280px;
+        }
+        .compare-table thead tr {
+            background: linear-gradient(135deg, rgba(108,92,231,0.35), rgba(162,155,254,0.2));
+        }
+        .compare-table thead th {
+            padding: 8px 10px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--primary-light);
+            border-bottom: 1px solid rgba(162,155,254,0.25);
+            white-space: nowrap;
+        }
+        .compare-table tbody tr:nth-child(even) {
+            background: rgba(255,255,255,0.03);
+        }
+        .compare-table tbody tr:hover {
+            background: rgba(108,92,231,0.12);
+            transition: background 0.2s;
+        }
+        .compare-table tbody td {
+            padding: 7px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            color: var(--text-primary);
+            vertical-align: middle;
+        }
+        .compare-table tbody td:first-child {
+            color: var(--text-secondary);
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        /* ============================================================
+           Guide Button
+           ============================================================ */
+        .guide-btn {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(162, 155, 254, 0.15);
+            border: 1px solid rgba(162, 155, 254, 0.3);
+            color: var(--primary-light);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s;
+            flex-shrink: 0;
+            padding: 0;
+        }
+        .guide-btn:hover {
+            background: rgba(162, 155, 254, 0.28);
+            border-color: rgba(162, 155, 254, 0.55);
+            transform: scale(1.08);
+        }
+        .guide-btn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+            flex-shrink: 0;
+        }
+
+        /* ============================================================
+           Guide Panel
+           ============================================================ */
+        .guide-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg-dark);
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            border-radius: var(--radius);
+            overflow: hidden;
+            transform: translateY(100%);
+            opacity: 0;
+            transition: transform 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.3s;
+            pointer-events: none;
+        }
+        .guide-panel.open {
+            transform: translateY(0);
+            opacity: 1;
+            pointer-events: all;
+        }
+        .guide-panel-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, rgba(108,92,231,0.25), rgba(162,155,254,0.1));
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .guide-back-btn {
+            background: none;
+            border: none;
+            color: var(--primary-light);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        .guide-back-btn:hover { background: rgba(162,155,254,0.15); }
+        .guide-back-btn svg { width: 20px; height: 20px; fill: currentColor; }
+        .guide-panel-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            flex: 1;
+        }
+        .guide-close-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s, background 0.2s;
+        }
+        .guide-close-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
+        .guide-close-btn svg { width: 20px; height: 20px; fill: currentColor; }
+        .guide-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+        .guide-content::-webkit-scrollbar { width: 4px; }
+        .guide-content::-webkit-scrollbar-track { background: transparent; }
+        .guide-content::-webkit-scrollbar-thumb { background: rgba(108,92,231,0.4); border-radius: 2px; }
+        /* Topic List */
+        .guide-intro {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 14px;
+            line-height: 1.5;
+        }
+        .guide-topic-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .guide-topic-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 13px 14px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s;
+        }
+        .guide-topic-item:hover {
+            background: rgba(108,92,231,0.12);
+            border-color: rgba(108,92,231,0.35);
+            transform: translateX(3px);
+        }
+        .guide-topic-icon {
+            font-size: 22px;
+            flex-shrink: 0;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(108,92,231,0.12);
+            border-radius: 10px;
+        }
+        .guide-topic-text { flex: 1; }
+        .guide-topic-name {
+            font-size: 13.5px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+        .guide-topic-desc {
+            font-size: 11.5px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+        .guide-topic-arrow { color: var(--text-muted); font-size: 16px; }
+        /* Steps View */
+        .guide-steps-view { display: none; }
+        .guide-steps-view.active { display: block; }
+        .guide-topic-banner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px;
+            background: linear-gradient(135deg, rgba(108,92,231,0.2), rgba(162,155,254,0.08));
+            border: 1px solid rgba(108,92,231,0.25);
+            border-radius: 12px;
+            margin-bottom: 16px;
+        }
+        .guide-topic-banner-icon { font-size: 28px; }
+        .guide-topic-banner-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .guide-topic-banner-sub {
+            font-size: 11.5px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+        .guide-steps-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+        .guide-step {
+            display: flex;
+            gap: 12px;
+            padding-bottom: 16px;
+            position: relative;
+        }
+        .guide-step:not(:last-child)::before {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 32px;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to bottom, rgba(108,92,231,0.5), rgba(108,92,231,0.05));
+        }
+        .guide-step-num {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6C5CE7, #A29BFE);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 2px 10px rgba(108,92,231,0.35);
+            z-index: 1;
+        }
+        .guide-step-body { flex: 1; padding-top: 5px; }
+        .guide-step-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 3px;
+        }
+        .guide-step-detail {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+        .guide-step-tip {
+            font-size: 11.5px;
+            color: var(--primary-light);
+            background: rgba(108,92,231,0.1);
+            border-left: 2px solid var(--primary);
+            padding: 6px 10px;
+            border-radius: 0 6px 6px 0;
+            margin-top: 6px;
+            line-height: 1.4;
+        }
+        .guide-try-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 16px;
+            padding: 10px 18px;
+            background: linear-gradient(135deg, #6C5CE7, #A29BFE);
+            color: #fff;
+            border: none;
+            border-radius: 20px;
+            font-family: var(--font);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            justify-content: center;
+            transition: opacity 0.2s, transform 0.15s;
+        }
+        .guide-try-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+
+        /* ============================================================
+           Clear Button
+           ============================================================ */
+        .clear-btn {
+            width: 34px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(229, 49, 112, 0.12);
+            border: 1px solid rgba(229, 49, 112, 0.25);
+            color: var(--error);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s;
+            flex-shrink: 0;
+            padding: 0;
+        }
+        .clear-btn:hover {
+            background: rgba(229, 49, 112, 0.25);
+            border-color: rgba(229, 49, 112, 0.5);
+            transform: scale(1.08);
+        }
+        .clear-btn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+            flex-shrink: 0;
+        }
+        
+        /* ============================================================
+           Copy Button
+           ============================================================ */
+        .copy-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            font-family: var(--font);
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: var(--transition);
+        }
+        .copy-btn:hover {
+            color: var(--primary-light) !important;
+            background: rgba(255, 255, 255, 0.06);
+        }
+        .copy-btn:active {
+            transform: scale(0.95);
+        }
+        .copy-btn svg {
+            width: 11px;
+            height: 11px;
+            fill: currentColor;
+        }
+
+        /* ============================================================
+           Input Clear Button (X inside input wrapper)
+           ============================================================ */
+        .input-clear-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: none; /* Toggled via JS */
+            align-items: center;
+            justify-content: center;
+            padding: 4px;
+            margin-right: 4px;
+            border-radius: 50%;
+            transition: var(--transition);
+        }
+        .input-clear-btn:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.08);
+        }
+        .input-clear-btn svg {
+            width: 14px;
+            height: 14px;
+            fill: currentColor;
+        }
+
+        /* ============================================================
+           Scroll to Bottom Indicator
+           ============================================================ */
+        #scroll-bottom-btn {
+            position: absolute;
+            bottom: 96px;
+            right: 20px;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--primary-light);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 99;
+            opacity: 0;
+            transform: scale(0.8);
+            pointer-events: none;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        #scroll-bottom-btn.visible {
+            opacity: 1;
+            transform: scale(1);
+            pointer-events: all;
+        }
+        #scroll-bottom-btn:hover {
+            background: var(--bg-input);
+            color: #fff;
+        }
+        #scroll-bottom-btn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+
+        /* ============================================================
+           Reset Position Button
+           ============================================================ */
+        .reset-position-btn {
+            position: absolute;
+            bottom: 84px;
+            left: 50%;
+            transform: translateX(-50%) translateY(10px);
+            background: rgba(108, 92, 231, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #fff;
+            font-family: var(--font);
+            font-size: 11px;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 1000;
+            transition: opacity 0.3s, transform 0.3s, background 0.2s;
+            opacity: 0;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .reset-position-btn.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+            pointer-events: all;
+        }
+        .reset-position-btn:hover {
+            background: var(--primary);
+            transform: translateX(-50%) translateY(-1px);
+        }
+
+        /* ============================================================
+           Fast Commands Dropdown Menu
+           ============================================================ */
+        .cmd-menu-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-sm);
+            transition: var(--transition);
+            flex-shrink: 0;
+        }
+        .cmd-menu-btn:hover {
+            color: var(--primary-light);
+            background: rgba(255, 255, 255, 0.08);
+        }
+        .cmd-menu-btn.active {
+            color: var(--primary-light);
+            background: rgba(162, 155, 254, 0.15);
+        }
+        .cmd-menu-btn svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+
+        .cmd-dropdown {
+            position: absolute;
+            bottom: 74px;
+            left: 20px;
+            right: 20px;
+            max-height: 280px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            overflow-y: auto;
+            display: none;
+            animation: dropdownSlideUp 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        @keyframes dropdownSlideUp {
+            from { transform: translateY(10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .cmd-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: var(--transition);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+        .cmd-item:last-child {
+            border-bottom: none;
+        }
+        .cmd-item:hover {
+            background: rgba(162, 155, 254, 0.08);
+            color: #fff;
+        }
+        .cmd-item-icon {
+            font-size: 14px;
+            color: var(--primary-light);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .cmd-item-icon svg {
+            width: 14px;
+            height: 14px;
+            fill: currentColor;
+        }
+        .cmd-item-text {
+            flex-grow: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .cmd-item-badge {
+            font-size: 10px;
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-muted);
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-family: monospace;
+            flex-shrink: 0;
+        }
+
+        /* ============================================================
+           Contact Button
+           ============================================================ */
+        .contact-btn {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(46, 204, 113, 0.12);
+            border: 1px solid rgba(46, 204, 113, 0.25);
+            color: #2ecc71;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s;
+            flex-shrink: 0;
+            padding: 0;
+        }
+        .contact-btn:hover {
+            background: rgba(46, 204, 113, 0.25);
+            border-color: rgba(46, 204, 113, 0.5);
+            transform: scale(1.08);
+        }
+        .contact-btn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+            flex-shrink: 0;
+        }
+
+        /* ============================================================
+           Contact Overlay
+           ============================================================ */
+        .contact-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 10, 15, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 300;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            padding: 20px;
+        }
+        .contact-overlay.open {
+            opacity: 1;
+            pointer-events: all;
+        }
+        .contact-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            width: 100%;
+            max-width: 320px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            transform: translateY(20px);
+            transition: transform 0.3s ease;
+            overflow: hidden;
+        }
+        .contact-overlay.open .contact-card {
+            transform: translateY(0);
+        }
+        .contact-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, rgba(46, 204, 113, 0.15), rgba(46, 204, 113, 0.05));
+            border-bottom: 1px solid var(--border);
+        }
+        .contact-card-header h3 {
+            margin: 0;
+            font-size: 14.5px;
+            color: #2ecc71;
+            font-family: var(--font);
+            font-weight: 700;
+        }
+        .contact-close-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 16px;
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s;
+        }
+        .contact-close-btn:hover {
+            color: var(--text-primary);
+        }
+        .contact-card-body {
+            padding: 20px;
+        }
+        .contact-intro {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+            line-height: 1.4;
+        }
+        .contact-info-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .contact-info-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            text-decoration: none;
+            color: inherit;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s;
+        }
+        .contact-info-item:hover {
+            background: rgba(46, 204, 113, 0.08);
+            border-color: rgba(46, 204, 113, 0.25);
+            transform: translateX(3px);
+        }
+        .contact-info-icon {
+            font-size: 18px;
+            width: 32px;
+            height: 32px;
+            background: rgba(46, 204, 113, 0.12);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .contact-info-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .contact-info-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .contact-info-val {
+            font-size: 12px;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <!-- Toggle Button -->
+    <button id="billerq-chat-toggle" aria-label="Open AI Assistant">
+
+        <svg class="icon-chat" viewBox="0 0 512 512">
+            <g>
+                <path style="fill: #ffffff;" d="M108.8,342.6c-28.8,0-52.2-23.4-52.2-52.2V78c0-28.8,23.4-52.2,52.2-52.2S161,49.1,161,78v212.5C161,319.3,137.6,342.6,108.8,342.6z"/>
+                <path style="fill: #ffffff;" d="M250.7,487c-106.9,0-193.8-87-193.8-193.8s87-193.8,193.8-193.8s193.8,87,193.8,193.8S357.5,487,250.7,487z M250.7,203.7c-49.3,0-89.5,40.1-89.5,89.5s40.1,89.5,89.5,89.5s89.5-40.1,89.5-89.5S300,203.7,250.7,203.7z"/>
+                <circle style="fill: #F15A24;" cx="392.1" cy="431.8" r="52.2"/>
+            </g>
+        </svg>
+        <svg class="icon-close" viewBox="0 0 24 24">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+        </svg>
+    </button>
+
+    <!-- Chat Window -->
+    <div id="billerq-chat-window">
+        <!-- Header -->
+        <div class="chat-header">
+            <div class="header-drag-handle" id="headerDragHandle" title="Hold and drag to move chatbot">
+                <svg viewBox="0 0 24 24"><path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+            </div>
+            <div class="chat-header-avatar">🤖</div>
+            <div class="chat-header-info">
+                <div class="chat-header-title">BillerQ AI Assistant</div>
+                <div class="chat-header-status">
+                    <span class="status-dot"></span>
+                    Online
+                </div>
+            </div>
+            <div class="chat-header-actions">
+                <button class="clear-btn" id="clearChatBtn" title="Clear Chat History">
+                    <svg viewBox="0 0 24 24"><path d="M16 9v10H8V9h8m-1.5-6h-5l-1 1H5v2h14V4h-3.5l-1-1zM18 7H6v12c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7z"/></svg>
+                </button>
+                <div class="header-column-actions">
+                    <button class="guide-btn" id="guidBtn" title="Open BillerQ Guide">
+                        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
+                    </button>
+                    <button class="contact-btn" id="contactBtn" title="Contact Us">
+                        <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Guide Panel (overlays chat) -->
+        <div class="guide-panel" id="guidePanel">
+            <div class="guide-panel-header">
+                <button class="guide-back-btn" id="guideBackBtn" style="display:none" title="Back">
+                    <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                </button>
+                <div class="guide-panel-title" id="guidePanelTitle">📖 BillerQ Guide</div>
+                <button class="guide-close-btn" id="guideCloseBtn" title="Close guide">
+                    <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
+            </div>
+            <div class="guide-content" id="guideContent">
+                <!-- Topic List -->
+                <div id="guideTopicList">
+                    <p class="guide-intro">Select a topic below to see step-by-step instructions for common BillerQ tasks.</p>
+                    <div class="guide-topic-list">
+                        <div class="guide-topic-item" data-topic="add-customer">
+                            <div class="guide-topic-icon">👤</div>
+                            <div class="guide-topic-text">
+                                <div class="guide-topic-name">Add a Customer</div>
+                                <div class="guide-topic-desc">Register a new subscriber in BillerQ</div>
+                            </div>
+                            <span class="guide-topic-arrow">›</span>
+                        </div>
+                        <div class="guide-topic-item" data-topic="record-payment">
+                            <div class="guide-topic-icon">💳</div>
+                            <div class="guide-topic-text">
+                                <div class="guide-topic-name">Record a Payment</div>
+                                <div class="guide-topic-desc">Collect and record customer payments</div>
+                            </div>
+                            <span class="guide-topic-arrow">›</span>
+                        </div>
+                        <div class="guide-topic-item" data-topic="create-invoice">
+                            <div class="guide-topic-icon">🧾</div>
+                            <div class="guide-topic-text">
+                                <div class="guide-topic-name">Create an Invoice</div>
+                                <div class="guide-topic-desc">Generate billing invoices for customers</div>
+                            </div>
+                            <span class="guide-topic-arrow">›</span>
+                        </div>
+                        <div class="guide-topic-item" data-topic="manage-subscription">
+                            <div class="guide-topic-icon">📦</div>
+                            <div class="guide-topic-text">
+                                <div class="guide-topic-name">Manage Subscriptions</div>
+                                <div class="guide-topic-desc">Activate, renew or cancel a plan</div>
+                            </div>
+                            <span class="guide-topic-arrow">›</span>
+                        </div>
+                        <div class="guide-topic-item" data-topic="add-complaint">
+                            <div class="guide-topic-icon">🛠️</div>
+                            <div class="guide-topic-text">
+                                <div class="guide-topic-name">Log a Complaint</div>
+                                <div class="guide-topic-desc">Record and track customer complaints</div>
+                            </div>
+                            <span class="guide-topic-arrow">›</span>
+                        </div>
+                        <div class="guide-topic-item" data-topic="view-reports">
+                            <div class="guide-topic-icon">📊</div>
+                            <div class="guide-topic-text">
+                                <div class="guide-topic-name">View Reports</div>
+                                <div class="guide-topic-desc">Access payment and customer analytics</div>
+                            </div>
+                            <span class="guide-topic-arrow">›</span>
+                        </div>
+                        <div class="guide-topic-item" data-topic="ai-chatbot">
+                            <div class="guide-topic-icon">🤖</div>
+                            <div class="guide-topic-text">
+                                <div class="guide-topic-name">Using the AI Chatbot</div>
+                                <div class="guide-topic-desc">Tips to get the best from the AI assistant</div>
+                            </div>
+                            <span class="guide-topic-arrow">›</span>
+                        </div>
+                        <div class="guide-topic-item" data-topic="contact-us">
+                            <div class="guide-topic-icon">📞</div>
+                            <div class="guide-topic-text">
+                                <div class="guide-topic-name">Contact Us</div>
+                                <div class="guide-topic-desc">Get in touch with BillerQ support</div>
+                            </div>
+                            <span class="guide-topic-arrow">›</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Steps View (dynamically populated) -->
+                <div id="guideStepsView" class="guide-steps-view"></div>
+            </div>
+        </div>
+
+        <!-- Contact Us Overlay Modal -->
+        <div id="contactOverlay" class="contact-overlay">
+            <div class="contact-card">
+                <div class="contact-card-header">
+                    <h3>📞 Need More Help?</h3>
+                    <button class="contact-close-btn" id="contactCloseBtn" title="Close">✕</button>
+                </div>
+                <div class="contact-card-body">
+                    <p class="contact-intro">Feel free to reach out to us. We are happy to assist you!</p>
+                    
+                    <div class="contact-info-list">
+                        <a href="mailto:info@billerq.com" class="contact-info-item">
+                            <span class="contact-info-icon">✉️</span>
+                            <div class="contact-info-text">
+                                <span class="contact-info-label">Email Us</span>
+                                <span class="contact-info-val">info@billerq.com</span>
+                            </div>
+                        </a>
+                        
+                        <a href="tel:+917012733393" class="contact-info-item">
+                            <span class="contact-info-icon">📞</span>
+                            <div class="contact-info-text">
+                                <span class="contact-info-label">Call Us</span>
+                                <span class="contact-info-val">+91 7012733393</span>
+                            </div>
+                        </a>
+                        
+                        <a href="https://billerq.com/contact.php" target="_blank" class="contact-info-item">
+                            <span class="contact-info-icon">🌐</span>
+                            <div class="contact-info-text">
+                                <span class="contact-info-label">Visit Contact Page</span>
+                                <span class="contact-info-val">billerq.com/contact.php</span>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="auth-warning" id="authWarning">
+            Sign in through the main BillerQ app first. The assistant becomes available only after successful login.
+        </div>
+
+        <!-- Reset Position Button -->
+        <button id="resetPositionBtn" class="reset-position-btn" title="Reset chatbot window position to default">
+            ↩ Reset Position
+        </button>
+
+        <!-- Messages -->
+        <div class="chat-messages" id="chatMessages">
+            <div class="welcome-message">
+                <div class="welcome-emoji">👋</div>
+                <div class="welcome-title" id="welcomeTitle">Hi there!</div>
+                <div class="welcome-subtitle">
+                    I'm your BillerQ AI assistant. Ask me about customers, payments, subscriptions, or reports.
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Scroll to Bottom Button -->
+        <button id="scroll-bottom-btn" title="Scroll to bottom" type="button">
+            <svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+        </button>
+
+        <!-- Fast Commands Dropdown Menu -->
+        <div class="cmd-dropdown" id="cmdDropdown"></div>
+
+        <!-- Input -->
+        <div class="chat-input-area">
+            <div class="chat-input-wrapper">
+                <button class="cmd-menu-btn" id="cmdMenuBtn" type="button" aria-label="Fast Commands" title="Fast Commands Menu">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M4 10.5h16c.8 0 1.5-.7 1.5-1.5s-.7-1.5-1.5-1.5H4c-.8 0-1.5.7-1.5 1.5s.7 1.5 1.5 1.5zm0 6h16c.8 0 1.5-.7 1.5-1.5s-.7-1.5-1.5-1.5H4c-.8 0-1.5.7-1.5 1.5s.7 1.5 1.5 1.5zM4 5h16c.8 0 1.5-.7 1.5-1.5S20.8 2 20 2H4c-.8 0-1.5.7-1.5 1.5S3.2 5 4 5zM2 20.5c0 .8.7 1.5 1.5 1.5h16c.8 0 1.5-.7 1.5-1.5s-.7-1.5-1.5-1.5h-16c-.8 0-1.5.7-1.5 1.5z"/>
+                    </svg>
+                </button>
+                <button class="mic-btn" id="micBtn" type="button" aria-label="Voice input">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+                    </svg>
+                </button>
+                <input
+                    type="text"
+                    id="chatInput"
+                    placeholder="How can I help you today?"
+                    autocomplete="off"
+                >
+                <button class="input-clear-btn" id="inputClearBtn" type="button" aria-label="Clear input">
+                    <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
+                <span id="charCount" style="color:var(--text-muted); font-size:10px; margin-right:8px; display:none; white-space:nowrap;">0/1000</span>
+                <button class="send-btn" id="sendBtn" disabled aria-label="Send message">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        'use strict';
+
+        // ============================================================
+        // Configuration
+        // ============================================================
+        // Default to the local backend started by start_dev.bat (port 8080).
+        // If embedding in the parent app set `window.BILLERQ_AI_URL` to the host.
+        const API_URL = window.BILLERQ_AI_URL || 'http://127.0.0.1:8080';
+        let sessionId = localStorage.getItem('billerq_session_id') || generateId();
+        localStorage.setItem('billerq_session_id', sessionId);
+        
+        let parentToken = '';
+        let parentApiUrl = '';
+        let parentUserRole = null;
+
+        function getAuthToken() {
+            if (parentToken) {
+                return parentToken;
+            }
+            try {
+                const loginStr = localStorage.getItem('login');
+                if (loginStr) {
+                    const keys = ['6Lf2jgMqAAAAACyRDVxBwemO3J5uxCMKyvzIvNbV', 'your-secret-key'];
+                    for (const key of keys) {
+                        try {
+                            const decrypted = CryptoJS.AES.decrypt(loginStr, key).toString(CryptoJS.enc.Utf8);
+                            if (decrypted) {
+                                const loginData = JSON.parse(decrypted);
+                                if (loginData && loginData.userToken) {
+                                    return loginData.userToken;
+                                }
+                            }
+                        } catch (_) {
+                            // ignore invalid key attempt
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('BillerQ AI: Failed to read token from login in localStorage', e);
+            }
+            return null;
+        }
+
+        function getAuthApiUrl() {
+            if (parentApiUrl) {
+                return parentApiUrl;
+            }
+            try {
+                const profileStr = localStorage.getItem('auth0_profile');
+                if (profileStr) {
+                    const profileData = JSON.parse(profileStr);
+                    if (profileData && profileData.apiUrl) {
+                        return profileData.apiUrl;
+                    }
+                }
+            } catch (e) {
+                // ignore
+            }
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                const role = getAuthUserRole();
+                if (role === 1 || String(role) === '1') {
+                    return 'https://customer.billerq.com/public/api';
+                }
+                return 'https://customerapi.billerq.com/api';
+            }
+            try {
+                const ref = document.referrer;
+                if (ref) {
+                    const origin = new URL(ref).origin;
+                    if (origin.includes('admin.billerq.com')) {
+                        return 'https://admin.billerq.com/public/api';
+                    }
+                    if (origin.includes('customer.billerq.com')) {
+                        return 'https://customer.billerq.com/public/api';
+                    }
+                    return origin + '/api';
+                }
+            } catch (e) {
+                // fall through
+            }
+            return null;
+        }
+
+        function getAuthUserRole() {
+            if (parentUserRole !== null) {
+                return parentUserRole;
+            }
+            try {
+                const loginStr = localStorage.getItem('login');
+                if (loginStr) {
+                    const keys = ['6Lf2jgMqAAAAACyRDVxBwemO3J5uxCMKyvzIvNbV', 'your-secret-key'];
+                    for (const key of keys) {
+                        try {
+                            const decrypted = CryptoJS.AES.decrypt(loginStr, key).toString(CryptoJS.enc.Utf8);
+                            if (decrypted) {
+                                const loginData = JSON.parse(decrypted);
+                                if (loginData) {
+                                    const role = loginData.userType !== undefined ? loginData.userType : loginData.userRole;
+                                    if (role !== undefined) return role;
+                                }
+                            }
+                        } catch (_) {
+                            // ignore invalid key attempt
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('BillerQ AI: Failed to read userRole from login in localStorage', e);
+            }
+            return null;
+        }
+
+        let parentProfile = null;
+
+        function getAuthUserName() {
+            if (parentProfile) {
+                const name = parentProfile.name || parentProfile.userName || parentProfile.username || parentProfile.user_name || parentProfile.given_name || parentProfile.nickname || parentProfile.email;
+                if (name) {
+                    return formatName(name);
+                }
+            }
+            try {
+                const profileStr = localStorage.getItem('auth0_profile');
+                if (profileStr) {
+                    const profileData = JSON.parse(profileStr);
+                    if (profileData) {
+                        const name = profileData.name || profileData.given_name || profileData.nickname || profileData.email;
+                        if (name) return formatName(name);
+                    }
+                }
+            } catch (e) {}
+            try {
+                const loginStr = localStorage.getItem('login');
+                if (loginStr) {
+                    const keys = ['6Lf2jgMqAAAAACyRDVxBwemO3J5uxCMKyvzIvNbV', 'your-secret-key'];
+                    for (const key of keys) {
+                        try {
+                            const decrypted = CryptoJS.AES.decrypt(loginStr, key).toString(CryptoJS.enc.Utf8);
+                            if (decrypted) {
+                                const loginData = JSON.parse(decrypted);
+                                if (loginData) {
+                                    const name = loginData.userName || loginData.name || loginData.username || loginData.email;
+                                    if (name) return formatName(name);
+                                }
+                            }
+                        } catch (_) {}
+                    }
+                }
+            } catch (e) {}
+            return null;
+        }
+
+        function formatName(rawName) {
+            if (!rawName) return '';
+            let name = String(rawName);
+            if (name.includes('@')) {
+                name = name.split('@')[0];
+            }
+            name = name.replace(/[._]/g, ' ');
+            name = name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            return name;
+        }
+
+        function updateWelcomeMessage() {
+            const welcomeTitle = document.getElementById('welcomeTitle');
+            if (welcomeTitle) {
+                const userName = getAuthUserName();
+                if (userName && userName.trim()) {
+                    welcomeTitle.textContent = `Hi ${userName.trim()}!`;
+                } else {
+                    welcomeTitle.textContent = `Hi there!`;
+                }
+            }
+        }
+
+        function updateAuthUI() {
+            const authWarning = document.getElementById('authWarning');
+            const token = getAuthToken();
+            const allowed = Boolean(token);
+            toggle.disabled = !allowed;
+            if (authWarning) {
+                authWarning.style.display = allowed ? 'none' : 'block';
+            }
+            updateWelcomeMessage();
+            return allowed;
+        }
+
+        // Notify parent we are ready to receive auth data
+        if (window.parent !== window) {
+            window.parent.postMessage({ type: 'widget-ready' }, '*');
+        }
+
+        // Listen for token from parent
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'billerq-auth') {
+                const profile = event.data.profile;
+                if (profile) {
+                    parentProfile = profile;
+                    parentToken = profile.token || '';
+                    parentApiUrl = profile.apiUrl || '';
+                    parentUserRole = profile.userRole !== undefined ? profile.userRole : null;
+                    console.log('BillerQ AI Widget: Updated session details from parent');
+                    updateAuthUI();
+                }
+            }
+        });
+
+        // ============================================================
+        // DOM Elements
+        // ============================================================
+        const toggle = document.getElementById('billerq-chat-toggle');
+        const chatWindow = document.getElementById('billerq-chat-window');
+        const chatMessages = document.getElementById('chatMessages');
+        const chatInput = document.getElementById('chatInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const quickActions = document.getElementById('quickActions');
+        const micBtn = document.getElementById('micBtn');
+        const clearChatBtn = document.getElementById('clearChatBtn');
+        const inputClearBtn = document.getElementById('inputClearBtn');
+        const charCount = document.getElementById('charCount');
+        const scrollBottomBtn = document.getElementById('scroll-bottom-btn');
+        const cmdMenuBtn = document.getElementById('cmdMenuBtn');
+        const cmdDropdown = document.getElementById('cmdDropdown');
+        const contactBtn = document.getElementById('contactBtn');
+        const contactOverlay = document.getElementById('contactOverlay');
+        const contactCloseBtn = document.getElementById('contactCloseBtn');
+        const resetPositionBtn = document.getElementById('resetPositionBtn');
+
+        let isOpen = false;
+        let isLoading = false;
+
+        // ============================================================
+        // Fast Commands Dropdown Configuration & State
+        // ============================================================
+        const DEFAULT_FAST_COMMANDS = [
+            "How many active customers?",
+            "Show recent payments",
+            "Who has overdue payments?",
+            "Show package report",
+            "Show all complaints",
+            "Show active connections",
+            "What is the total unpaid amount?",
+            "List inactive customers",
+            "Show unresolved complaints",
+            "Total collection for this month",
+            "Show online payments",
+            "List all set-top boxes",
+            "List recent enquiries",
+            "Show recent leads",
+            "Show total wallet balance",
+            "Total collection for today",
+            "List pending subscriptions",
+            "Show complaint status counts",
+            "List archived customers",
+            "Show customer payment report"
+        ];
+
+        let fastCommands = [];
+        try {
+            const saved = localStorage.getItem('billerq_fast_commands');
+            if (saved) {
+                fastCommands = JSON.parse(saved);
+            }
+        } catch (e) {
+            console.error('Failed to load fast commands from localStorage', e);
+        }
+
+        // Fill up to 20 with defaults if not enough or empty
+        if (!Array.isArray(fastCommands) || fastCommands.length === 0) {
+            fastCommands = [...DEFAULT_FAST_COMMANDS];
+        } else {
+            fastCommands = fastCommands.filter((v, i, a) => a.indexOf(v) === i); // deduplicate
+            if (fastCommands.length < 20) {
+                for (const cmd of DEFAULT_FAST_COMMANDS) {
+                    if (!fastCommands.includes(cmd)) {
+                        fastCommands.push(cmd);
+                    }
+                    if (fastCommands.length >= 20) break;
+                }
+            }
+            fastCommands = fastCommands.slice(0, 20);
+        }
+
+        localStorage.setItem('billerq_fast_commands', JSON.stringify(fastCommands));
+
+        function renderDropdown() {
+            if (!cmdDropdown) return;
+            cmdDropdown.innerHTML = '';
+            fastCommands.forEach((cmd, index) => {
+                const item = document.createElement('div');
+                item.className = 'cmd-item';
+                
+                let icon = '📝';
+                const lower = cmd.toLowerCase();
+                if (lower.includes('customer')) icon = '👥';
+                else if (lower.includes('payment') || lower.includes('wallet') || lower.includes('collection') || lower.includes('unpaid')) icon = '💰';
+                else if (lower.includes('complaint')) icon = '🛠️';
+                else if (lower.includes('stb') || lower.includes('box') || lower.includes('connections')) icon = '📺';
+                else if (lower.includes('enquiry') || lower.includes('lead')) icon = '📈';
+                else if (lower.includes('report') || lower.includes('package')) icon = '📊';
+
+                item.innerHTML = `
+                    <div class="cmd-item-icon">${icon}</div>
+                    <div class="cmd-item-text" title="${escapeHtmlText(cmd)}">${escapeHtmlText(cmd)}</div>
+                `;
+
+                item.addEventListener('click', () => {
+                    executeFastCommand(cmd);
+                });
+                cmdDropdown.appendChild(item);
+            });
+        }
+
+        function escapeHtmlText(str) {
+            if (!str) return '';
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        function executeFastCommand(cmd) {
+            if (cmdDropdown) cmdDropdown.style.display = 'none';
+            if (cmdMenuBtn) cmdMenuBtn.classList.remove('active');
+            
+            if (chatInput) {
+                chatInput.value = cmd;
+                chatInput.focus();
+                
+                if (sendBtn) sendBtn.disabled = false;
+                if (inputClearBtn) inputClearBtn.style.display = 'inline-flex';
+                if (charCount) {
+                    charCount.textContent = `${cmd.length}/1000`;
+                    charCount.style.display = 'inline';
+                    charCount.style.color = 'var(--text-muted)';
+                }
+            }
+            
+            promoteCommand(cmd);
+        }
+
+        function promoteCommand(cmd) {
+            if (!cmd || !cmd.trim()) return;
+            const cleaned = cmd.trim();
+            
+            const idx = fastCommands.findIndex(c => c.toLowerCase() === cleaned.toLowerCase());
+            if (idx > -1) {
+                fastCommands.splice(idx, 1);
+            }
+            
+            fastCommands.unshift(cleaned);
+            fastCommands = fastCommands.slice(0, 20);
+            
+            localStorage.setItem('billerq_fast_commands', JSON.stringify(fastCommands));
+            renderDropdown();
+        }
+
+        // ============================================================
+        // Voice Input — Web Speech API (Chrome / Edge / Safari)
+        // Auto-sends when speech ends. Shows live interim results.
+        // ============================================================
+        if (micBtn) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            if (!SpeechRecognition) {
+                // Not supported — grey out and show tooltip
+                micBtn.disabled = true;
+                micBtn.title = 'Voice input not supported in this browser. Use Chrome or Edge.';
+                micBtn.style.opacity = '0.35';
+            } else {
+                const recognition = new SpeechRecognition();
+                recognition.continuous     = false;   // single utterance
+                recognition.interimResults = true;    // show words as you speak
+                recognition.lang           = 'en-IN'; // Indian English; change to 'ml-IN' for Malayalam
+                recognition.maxAlternatives = 1;
+
+                let isRecording    = false;
+                let interimTimeout = null;
+
+                // ---- Start / Stop toggle ----
+                micBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    micBtn.blur(); // Remove focus immediately so Enter doesn't click it
+                    chatInput.focus(); // Shift focus to input box
+                    if (isRecording) {
+                        recognition.stop();
+                    } else {
+                        chatInput.value = '';
+                        sendBtn.disabled = true;
+                        try {
+                            recognition.start();
+                        } catch (err) {
+                            console.warn('Recognition already running:', err);
+                        }
+                    }
+                });
+
+                // Prevent Enter key on micBtn from triggering standard click.
+                // Instead, send the current message if there is text.
+                micBtn.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        micBtn.blur();
+                        chatInput.focus();
+                        const val = chatInput.value.trim();
+                        if (val && !isLoading) {
+                            sendMessage(val);
+                        }
+                    }
+                });
+
+                // ---- Recording started ----
+                recognition.onstart = () => {
+                    isRecording = true;
+                    micBtn.classList.add('recording');
+                    micBtn.title = 'Tap to stop recording';
+                    chatInput.placeholder = '🎙️  Listening… speak now';
+                    chatInput.focus();
+                };
+
+                // ---- Live interim results (shows words as you speak) ----
+                recognition.onresult = (event) => {
+                    let interimText  = '';
+                    let finalText    = '';
+
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const t = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            finalText += t;
+                        } else {
+                            interimText += t;
+                        }
+                    }
+
+                    // Show live text in input (interim = dimmed via placeholder trick)
+                    if (interimText) {
+                        chatInput.value = interimText;
+                        sendBtn.disabled = true; // don't send yet
+                    }
+                    if (finalText) {
+                        chatInput.value = finalText.trim();
+                        sendBtn.disabled = false;
+                    }
+                    chatInput.focus();
+                };
+
+                // ---- Recording stopped (end of utterance) ----
+                recognition.onend = () => {
+                    isRecording = false;
+                    micBtn.classList.remove('recording');
+                    micBtn.title = 'Voice input';
+                    chatInput.placeholder = 'Ask me anything about BillerQ...';
+                    chatInput.focus();
+
+                    // Auto-send if we have a transcript
+                    const transcript = chatInput.value.trim();
+                    if (transcript && !isLoading) {
+                        // Small delay so user sees what was transcribed
+                        setTimeout(() => {
+                            sendMessage();
+                        }, 400);
+                    }
+                };
+
+                // ---- Errors ----
+                recognition.onerror = (event) => {
+                    isRecording = false;
+                    micBtn.classList.remove('recording');
+                    chatInput.placeholder = 'Ask me anything about BillerQ...';
+                    chatInput.value = '';
+                    chatInput.focus();
+
+                    const friendly = {
+                        'no-speech'       : 'No speech detected. Try again.',
+                        'audio-capture'   : 'Microphone not found. Check your mic.',
+                        'not-allowed'     : 'Mic access denied. Allow it in browser settings.',
+                        'network'         : 'Network error during voice recognition.',
+                    };
+                    const msg = friendly[event.error] || `Voice error: ${event.error}`;
+                    addMessage(msg, 'bot');
+                    console.warn('Speech recognition error:', event.error);
+                };
+            }
+        }
+
+        // ============================================================
+        // Repositioning (Drag and Hold) helpers
+        // ============================================================
+        function makeDraggable(el, onDragStart, onDragMove, onDragEnd) {
+            let isDragging = false;
+            let startX = 0;
+            let startY = 0;
+            let moveThreshold = 6;
+            let hasMoved = false;
+
+            el.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                if (e.target.closest('button') || e.target.closest('input')) return;
+                
+                e.stopPropagation();
+                isDragging = true;
+                hasMoved = false;
+                startX = e.clientX;
+                startY = e.clientY;
+                
+                if (onDragStart) onDragStart(e);
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+                e.preventDefault();
+            });
+
+            el.addEventListener('touchstart', (e) => {
+                if (e.target.closest('button') || e.target.closest('input')) return;
+                e.stopPropagation();
+                
+                const touch = e.touches[0];
+                isDragging = true;
+                hasMoved = false;
+                startX = touch.clientX;
+                startY = touch.clientY;
+                
+                if (onDragStart) onDragStart(touch);
+                document.addEventListener('touchmove', onTouchMove, { passive: false });
+                document.addEventListener('touchend', onTouchEnd);
+            });
+
+            function onMouseMove(e) {
+                if (!isDragging) return;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                
+                if (!hasMoved && (Math.abs(dx) > moveThreshold || Math.abs(dy) > moveThreshold)) {
+                    hasMoved = true;
+                }
+                
+                if (hasMoved && onDragMove) {
+                    onDragMove(dx, dy);
+                }
+            }
+
+            function onTouchMove(e) {
+                if (!isDragging) return;
+                const touch = e.touches[0];
+                const dx = touch.clientX - startX;
+                const dy = touch.clientY - startY;
+                
+                if (!hasMoved && (Math.abs(dx) > moveThreshold || Math.abs(dy) > moveThreshold)) {
+                    hasMoved = true;
+                }
+                
+                if (hasMoved) {
+                    e.preventDefault();
+                    if (onDragMove) {
+                        onDragMove(dx, dy);
+                    }
+                }
+            }
+
+            function onMouseUp(e) {
+                if (isDragging) {
+                    isDragging = false;
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                    if (onDragEnd) onDragEnd(hasMoved);
+                }
+            }
+
+            function onTouchEnd(e) {
+                if (isDragging) {
+                    isDragging = false;
+                    document.removeEventListener('touchmove', onTouchMove);
+                    document.removeEventListener('touchend', onTouchEnd);
+                    if (onDragEnd) onDragEnd(hasMoved);
+                }
+            }
+        }
+
+
+        const headerDragHandle = document.getElementById('headerDragHandle');
+
+        if (localStorage.getItem('billerq_widget_moved') === 'true') {
+            if (resetPositionBtn) resetPositionBtn.classList.add('visible');
+        }
+
+
+
+        if (headerDragHandle) {
+            makeDraggable(headerDragHandle,
+                () => window.parent.postMessage({ type: 'drag-start' }, '*'),
+                (dx, dy) => {
+                    localStorage.setItem('billerq_widget_moved', 'true');
+                    if (resetPositionBtn) resetPositionBtn.classList.add('visible');
+                    window.parent.postMessage({ type: 'drag-move', dx: dx, dy: dy }, '*');
+                },
+                () => window.parent.postMessage({ type: 'drag-end' }, '*')
+            );
+        }
+
+        if (resetPositionBtn) {
+            resetPositionBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                localStorage.removeItem('billerq_widget_moved');
+                resetPositionBtn.classList.remove('visible');
+                window.parent.postMessage({ type: 'reset-widget' }, '*');
+            });
+        }
+
+        // ============================================================
+        // Toggle Chat Window
+        // ============================================================
+        toggle.addEventListener('click', () => {
+            if (toggle.disabled) return;
+            if (toggle.getAttribute('data-dragged') === 'true') return;
+            isOpen = !isOpen;
+            toggle.classList.toggle('open', isOpen);
+            chatWindow.classList.toggle('visible', isOpen);
+
+            // Notify parent window to resize the iframe container
+            if (window.parent !== window) {
+                window.parent.postMessage({ type: 'toggle-chat', open: isOpen }, '*');
+            }
+
+            if (isOpen) {
+                setTimeout(() => chatInput.focus(), 400);
+            }
+        });
+
+        // ============================================================
+        // Fast Commands Dropdown Toggling
+        // ============================================================
+        if (cmdMenuBtn && cmdDropdown) {
+            cmdMenuBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isVisible = cmdDropdown.style.display === 'block';
+                if (isVisible) {
+                    cmdDropdown.style.display = 'none';
+                    cmdMenuBtn.classList.remove('active');
+                } else {
+                    renderDropdown();
+                    cmdDropdown.style.display = 'block';
+                    cmdMenuBtn.classList.add('active');
+                }
+            });
+
+            // Close when clicking anywhere outside
+            document.addEventListener('click', (e) => {
+                if (!cmdDropdown.contains(e.target) && e.target !== cmdMenuBtn && !cmdMenuBtn.contains(e.target)) {
+                    cmdDropdown.style.display = 'none';
+                    cmdMenuBtn.classList.remove('active');
+                }
+            });
+
+            // Close on Escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    cmdDropdown.style.display = 'none';
+                    cmdMenuBtn.classList.remove('active');
+                }
+            });
+        }
+
+        // ============================================================
+        // Clear Chat History
+        // ============================================================
+        if (clearChatBtn) {
+            clearChatBtn.addEventListener('click', () => {
+                if (confirm('Are you sure you want to clear the chat conversation?')) {
+                    // Reset backend session by generating a new session ID
+                    sessionId = generateId();
+                    localStorage.setItem('billerq_session_id', sessionId);
+                    
+                    // Clear messages container
+                    chatMessages.innerHTML = `
+                        <div class="welcome-message">
+                            <div class="welcome-emoji">👋</div>
+                            <div class="welcome-title" id="welcomeTitle">Hi there!</div>
+                            <div class="welcome-subtitle">
+                                I'm your BillerQ AI assistant. Ask me about customers, payments, subscriptions, or reports.
+                            </div>
+                        </div>
+                    `;
+                    updateWelcomeMessage();
+                    
+                    // Restore quick actions
+                    if (quickActions) {
+                        quickActions.style.display = 'flex';
+                    }
+                    
+                    // Reset input
+                    if (chatInput) {
+                        chatInput.value = '';
+                        if (inputClearBtn) inputClearBtn.style.display = 'none';
+                        if (charCount) charCount.style.display = 'none';
+                        if (sendBtn) sendBtn.disabled = true;
+                    }
+                    
+                    scrollToBottom();
+                }
+            });
+        }
+
+        // ============================================================
+        // Input Handling & Character Counter
+        // ============================================================
+        chatInput.addEventListener('input', () => {
+            const val = chatInput.value;
+            sendBtn.disabled = !val.trim() || isLoading;
+            
+            // Toggle input clear button visibility
+            if (inputClearBtn) {
+                inputClearBtn.style.display = val.length > 0 ? 'inline-flex' : 'none';
+            }
+            
+            // Character count check
+            if (charCount) {
+                charCount.textContent = `${val.length}/1000`;
+                charCount.style.display = val.length > 0 ? 'inline' : 'none';
+                if (val.length > 1000) {
+                    charCount.style.color = 'var(--error)';
+                    sendBtn.disabled = true;
+                } else {
+                    charCount.style.color = 'var(--text-muted)';
+                }
+            }
+        });
+
+        if (inputClearBtn) {
+            inputClearBtn.addEventListener('click', () => {
+                chatInput.value = '';
+                inputClearBtn.style.display = 'none';
+                if (charCount) charCount.style.display = 'none';
+                sendBtn.disabled = true;
+                chatInput.focus();
+            });
+        }
+
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey && chatInput.value.trim() && !isLoading && chatInput.value.length <= 1000) {
+                e.preventDefault();
+                sendMessage(chatInput.value.trim());
+            }
+        });
+
+        sendBtn.addEventListener('click', () => {
+            if (chatInput.value.trim() && !isLoading && chatInput.value.length <= 1000) {
+                sendMessage(chatInput.value.trim());
+            }
+        });
+
+        // ============================================================
+        // Scroll to Bottom Controls
+        // ============================================================
+        if (chatMessages && scrollBottomBtn) {
+            chatMessages.addEventListener('scroll', () => {
+                const threshold = 150;
+                const distanceToBottom = chatMessages.scrollHeight - chatMessages.clientHeight - chatMessages.scrollTop;
+                if (distanceToBottom > threshold) {
+                    scrollBottomBtn.classList.add('visible');
+                } else {
+                    scrollBottomBtn.classList.remove('visible');
+                }
+            });
+            
+            scrollBottomBtn.addEventListener('click', () => {
+                scrollToBottom();
+            });
+        }
+
+        // ============================================================
+        // Quick Action Buttons
+        // ============================================================
+        if (quickActions) {
+            quickActions.addEventListener('click', (e) => {
+                const btn = e.target.closest('.quick-action-btn');
+                if (btn && !isLoading) {
+                    const query = btn.getAttribute('data-query');
+                    sendMessage(query);
+                }
+            });
+        }
+
+        
+
+        // ============================================================
+        // Send Message
+        // ============================================================
+        async function sendMessage(text) {
+            if (isLoading) return;
+
+            // Promote query in Fast Commands dropdown (disabled so custom prompts don't enter the fast commands list)
+            // promoteCommand(text);
+
+            // Hide quick actions after first message
+            if (quickActions) {
+                quickActions.style.display = 'none';
+            }
+
+            // Check if user is sending a pure greeting or simple conversational phrase
+            const cleaned = text.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
+            const greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'hi there', 'hello there', 'greetings', 'greeting'];
+            const pleasantries = ['thank you', 'thanks', 'great', 'awesome', 'cool', 'perfect', 'ok', 'okay', 'nice', 'help'];
+            
+            if (greetings.includes(cleaned) || pleasantries.includes(cleaned)) {
+                appendMessage('user', text);
+                chatInput.value = '';
+                if (inputClearBtn) inputClearBtn.style.display = 'none';
+                if (charCount) charCount.style.display = 'none';
+                sendBtn.disabled = true;
+                
+                isLoading = true;
+                const typingEl = showTypingIndicator();
+                
+                setTimeout(() => {
+                    removeTypingIndicator(typingEl);
+                    const userName = getAuthUserName();
+                    const greetingName = userName ? ` ${userName.trim()}` : '';
+                    
+                    let reply = `Hello${greetingName}! How can I help you today?`;
+                    if (['thanks', 'thank you'].includes(cleaned)) {
+                        reply = `You're very welcome${greetingName}! I'm always happy to assist you. Let me know if there's anything else you need!`;
+                    } else if (['great', 'awesome', 'cool', 'perfect', 'nice'].includes(cleaned)) {
+                        reply = `Awesome! I'm glad I could help${greetingName}. Let me know if you need help with customers, payments, or reports!`;
+                    } else if (['ok', 'okay'].includes(cleaned)) {
+                        reply = `Perfect! Let me know what you would like to look up next${greetingName}.`;
+                    } else if (cleaned === 'help') {
+                        reply = `I'm here to help${greetingName}! You can check the <strong>Guide</strong> at the top for tutorials, or ask me questions like <em>"How many active customers?"</em> or <em>"Who has overdue payments?"</em>.`;
+                    }
+                    
+                    appendMessage('bot', reply);
+                    isLoading = false;
+                }, 400);
+                return;
+            }
+
+            // Add user message
+            appendMessage('user', text);
+            chatInput.value = '';
+            if (inputClearBtn) inputClearBtn.style.display = 'none';
+            if (charCount) charCount.style.display = 'none';
+            sendBtn.disabled = true;
+
+            // Show typing indicator
+            isLoading = true;
+            const typingEl = showTypingIndicator();
+
+            try {
+                // Resolve token from parent (host app) or from frontend login stored in localStorage
+                const userTokenLocal = getAuthToken();
+                const userApiUrlLocal = getAuthApiUrl();
+                const userRoleLocal = getAuthUserRole();
+
+                if (!userTokenLocal) {
+                    appendMessage('bot', 'Please sign in to BillerQ in the main app before using the assistant.');
+                    removeTypingIndicator(typingEl);
+                    isLoading = false;
+                    return;
+                }
+
+                const response = await fetch(`${API_URL}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: text,
+                        session_id: sessionId,
+                        billerq_token: userTokenLocal,
+                        billerq_api_url: userApiUrlLocal,
+                        billerq_user_role: userRoleLocal
+                    }),
+                });
+
+                const data = await response.json();
+
+                // Remove typing indicator
+                removeTypingIndicator(typingEl);
+
+                if (data.response) {
+                    appendMessage('bot', data.response, data.metadata);
+                    // Update session ID if server provides one
+                    if (data.session_id) {
+                        sessionId = data.session_id;
+                        localStorage.setItem('billerq_session_id', sessionId);
+                    }
+                } else {
+                    appendMessage('bot', 'Sorry, I encountered an issue. Please try again.');
+                }
+
+            } catch (error) {
+                removeTypingIndicator(typingEl);
+                console.error('BillerQ AI error:', error);
+                appendMessage('bot', 'Unable to connect to the AI assistant. Please check if the server is running.');
+            }
+
+            isLoading = false;
+        }
+
+        
+
+        // ============================================================
+        // Message Rendering
+        // ============================================================
+        function appendMessage(sender, text, metadata) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            if (sender === 'bot') {
+                messageDiv.innerHTML = `
+                    <div class="bot-avatar">🤖</div>
+                    <div class="message-content">
+                        <div class="message-bubble">${escapeHtml(text)}</div>
+                        <div class="message-time">
+                            ${timeStr}
+                            <button class="copy-btn" title="Copy response text" type="button">
+                                <svg viewBox="0 0 24 24">
+                                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                </svg>
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                // Add copy event handler
+                const copyBtn = messageDiv.querySelector('.copy-btn');
+                if (copyBtn) {
+                    copyBtn.addEventListener('click', () => {
+                        navigator.clipboard.writeText(text).then(() => {
+                            const originalHTML = copyBtn.innerHTML;
+                            copyBtn.innerHTML = `
+                                <svg viewBox="0 0 24 24" style="fill: #2ecc71;">
+                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                                Copied!
+                            `;
+                            setTimeout(() => {
+                                copyBtn.innerHTML = originalHTML;
+                            }, 2000);
+                        }).catch(err => {
+                            console.error('Failed to copy text: ', err);
+                        });
+                    });
+                }
+
+                // If the bot provided redirect metadata, render a button/link
+                if (metadata && metadata.redirect_url) {
+                    try {
+                        const resolved = resolveRedirectUrl(metadata.redirect_url);
+                        const label = metadata.redirect_label || 'Show more details';
+                        const btnContainer = document.createElement('div');
+                        btnContainer.className = 'redirect-container';
+
+                        const link = document.createElement('a');
+                        link.className = 'redirect-link';
+                        link.href = resolved;
+                        link.target = '_blank';
+                        link.rel = 'noopener';
+                        link.textContent = label;
+
+                        const btn = document.createElement('button');
+                        btn.className = 'redirect-btn';
+                        btn.type = 'button';
+                        btn.appendChild(link);
+
+                        // Open in new tab or ask parent to navigate when clicked
+                        btn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            try {
+                                const opened = window.open(resolved, '_blank');
+                                if (!opened && window.parent) {
+                                    window.parent.postMessage({ type: 'billerq-navigate', url: resolved }, '*');
+                                }
+                            } catch (err) {
+                                if (window.parent) {
+                                    window.parent.postMessage({ type: 'billerq-navigate', url: resolved }, '*');
+                                }
+                            }
+                        });
+
+                        // Append the button container under the message bubble
+                        const innerDiv = messageDiv.querySelector('.message-content');
+                        if (innerDiv) innerDiv.appendChild(btnContainer);
+                        btnContainer.appendChild(btn);
+                    } catch (err) {
+                        console.warn('Failed to render redirect button', err);
+                    }
+                }
+            } else {
+                messageDiv.innerHTML = `
+                    <div>
+                        <div class="message-bubble">${escapeHtml(text)}</div>
+                        <div class="message-time">${timeStr}</div>
+                    </div>
+                `;
+            }
+
+            chatMessages.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        // Resolve a redirect URL to an absolute URL when possible
+        function resolveRedirectUrl(url) {
+            if (!url) return '';
+            if (url.startsWith('http://') || url.startsWith('https://')) return url;
+            if (window.billerqAppUrl) return window.billerqAppUrl.replace(/\/$/, '') + url;
+            try {
+                const ref = document.referrer;
+                if (ref) {
+                    const origin = new URL(ref).origin;
+                    return origin + url;
+                }
+            } catch (e) {
+                // fall through
+            }
+            return url;
+        }
+
+        // ============================================================
+        // Typing Indicator
+        // ============================================================
+        function showTypingIndicator() {
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'typing-indicator';
+            typingDiv.id = 'typingIndicator';
+            typingDiv.innerHTML = `
+                <div class="bot-avatar">🤖</div>
+                <div class="typing-dots">
+                    <span></span><span></span><span></span>
+                </div>
+                <div class="typing-status" id="typingStatus">Analyzing query...</div>
+            `;
+            chatMessages.appendChild(typingDiv);
+            scrollToBottom();
+
+            // Status steps mapping duration to text
+            let elapsed = 0;
+            const statusEl = typingDiv.querySelector('#typingStatus');
+            const statuses = [
+                { time: 0, text: "Analyzing query..." },
+                { time: 4, text: "Routing to database handler..." },
+                { time: 10, text: "Formulating database request..." },
+                { time: 18, text: "Connecting to BillerQ database..." },
+                { time: 26, text: "Executing query on BillerQ..." },
+                { time: 36, text: "Retrieving records..." },
+                { time: 44, text: "Formatting results (using local CPU, please wait)..." },
+                { time: 60, text: "Generating summary text..." },
+                { time: 80, text: "Almost done (compiling final response)..." },
+                { time: 100, text: "Still working, please wait..." }
+            ];
+
+            const intervalId = setInterval(() => {
+                elapsed += 1;
+                const currentStatus = statuses.reduce((prev, curr) => {
+                    return (elapsed >= curr.time) ? curr : prev;
+                }, statuses[0]);
+                if (statusEl) {
+                    statusEl.textContent = currentStatus.text;
+                }
+            }, 1000);
+
+            typingDiv.dataset.intervalId = intervalId;
+            return typingDiv;
+        }
+
+        function removeTypingIndicator(el) {
+            if (el) {
+                if (el.dataset.intervalId) {
+                    clearInterval(parseInt(el.dataset.intervalId));
+                }
+                if (el.parentNode) {
+                    el.parentNode.removeChild(el);
+                }
+            }
+        }
+
+        // ============================================================
+        // Utilities
+        // ============================================================
+        function scrollToBottom() {
+            requestAnimationFrame(() => {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+
+            // ---- Markdown Table Rendering ----
+            // Detect if text contains a markdown table (lines with | ... | pattern)
+            const lines = text.split('\n');
+            const hasTable = lines.some(l => l.trim().startsWith('|') && l.trim().endsWith('|'));
+
+            if (hasTable) {
+                // Split into pre-table text, table lines, post-table text
+                let html = '';
+                let tableLines = [];
+                let inTable = false;
+                let preText = [];
+
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+                        if (!inTable && preText.length > 0) {
+                            // Render pre-table text first
+                            html += renderNonTableText(preText.join('\n'));
+                            preText = [];
+                        }
+                        inTable = true;
+                        tableLines.push(trimmed);
+                    } else {
+                        if (inTable) {
+                            html += renderMarkdownTable(tableLines);
+                            tableLines = [];
+                            inTable = false;
+                        }
+                        preText.push(line);
+                    }
+                }
+                if (inTable && tableLines.length > 0) {
+                    html += renderMarkdownTable(tableLines);
+                }
+                if (preText.length > 0) {
+                    html += renderNonTableText(preText.join('\n'));
+                }
+                return html;
+            }
+
+            return renderNonTableText(text);
+        }
+
+        function renderMarkdownTable(tableLines) {
+            // Filter out separator rows like |---|---|---|
+            const dataLines = tableLines.filter(l => !/^\|[-:\s|]+\|$/.test(l));
+            if (dataLines.length < 1) return '';
+
+            const parseRow = (line) => {
+                return line.replace(/^\|/, '').replace(/\|$/, '')
+                           .split('|').map(c => c.trim());
+            };
+
+            const headerCells = parseRow(dataLines[0]);
+            const bodyRows = dataLines.slice(1);
+
+            let html = '<div class="compare-table-wrap"><table class="compare-table"><thead><tr>';
+            for (const h of headerCells) {
+                html += `<th>${renderInlineMarkdown(h)}</th>`;
+            }
+            html += '</tr></thead><tbody>';
+
+            for (const row of bodyRows) {
+                const cells = parseRow(row);
+                html += '<tr>';
+                for (let i = 0; i < cells.length; i++) {
+                    html += `<td>${renderInlineMarkdown(cells[i])}</td>`;
+                }
+                html += '</tr>';
+            }
+            html += '</tbody></table></div>';
+            return html;
+        }
+
+        function renderInlineMarkdown(text) {
+            if (!text) return '';
+            // Escape HTML first
+            const div = document.createElement('div');
+            div.textContent = text;
+            let escaped = div.innerHTML;
+            // Bold
+            escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // Inline code
+            escaped = escaped.replace(/`(.*?)`/g, '<code style="background:rgba(255,255,255,0.08);padding:2px 5px;border-radius:4px;font-size:12px;">$1</code>');
+            return escaped;
+        }
+
+        function renderNonTableText(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            let escaped = div.innerHTML;
+
+            // Bold styling: **text** -> <strong>text</strong>
+            escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+            // Inline code: `code` -> <code>code</code>
+            escaped = escaped.replace(/`(.*?)`/g, '<code style="background: rgba(255, 255, 255, 0.08); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; color: var(--primary-light);">$1</code>');
+
+            // Replace sub-bullet characters/points starting with '-'
+            escaped = escaped.replace(/(?:^|<br>)\s*-\s+([^<\n]+)/g, (match, content) => {
+                return `<br><span style="display: inline-flex; align-items: flex-start; gap: 8px; margin-left: 24px; font-size: 13px; color: var(--text-secondary);"><span style="color: var(--text-muted);">—</span><span>${content}</span></span>`;
+            });
+
+            // Replace bullet characters/points at the start of a line with styled lists
+            escaped = escaped.replace(/(?:^|<br>)\s*•\s+([^<\n]+)/g, (match, content) => {
+                return `<br><span style="display: inline-flex; align-items: flex-start; gap: 8px; margin-left: 8px; margin-top: 10px; margin-bottom: 2px;"><span style="color: var(--primary-light);">•</span><span>${content}</span></span>`;
+            });
+
+            // Status badges styling
+            escaped = escaped.replace(/\b(ACTIVE|PAID|RESOLVED|OPEN|CLOSED|IN PROGRESS|INACTIVE|OVERDUE|PENDING)\b/g, (match) => {
+                let style = 'padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; display: inline-block; text-transform: uppercase; line-height: 1;';
+                if (['ACTIVE', 'PAID', 'RESOLVED', 'OPEN'].includes(match)) {
+                    style += ' background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.3);';
+                } else if (['INACTIVE', 'OVERDUE', 'CLOSED'].includes(match)) {
+                    style += ' background: rgba(231, 76, 60, 0.15); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.3);';
+                } else {
+                    style += ' background: rgba(241, 196, 15, 0.15); color: #f1c40f; border: 1px solid rgba(241, 196, 15, 0.3);';
+                }
+                return `<span style="${style}">${match}</span>`;
+            });
+
+            // Convert raw newlines to break tags
+            return escaped.replace(/\n/g, '<br>');
+        }
+
+        function generateId() {
+            return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // ============================================================
+        // Guide Panel
+        // ============================================================
+        const GUIDE_TOPICS = {
+            'add-customer': {
+                icon: '👤',
+                title: 'Add a Customer',
+                desc: 'Register a new subscriber in BillerQ',
+                tryQuery: 'show me active customers',
+                steps: [
+                    { title: 'Go to Customers', detail: 'Click <strong>Customers</strong> in the left sidebar, then select <strong>Customer</strong> from the dropdown.', tip: '💡 You can also use the search bar at the top to quickly find an existing customer.' },
+                    { title: 'Click "Add"', detail: 'Click the <strong>Add</strong> button at the top-right of the customer list page.' },
+                    { title: 'Fill in Details', detail: 'Enter the customer\'s <strong>First Name, Last Name, Mobile Number</strong>, and <strong>Area</strong>. These are required fields.' },
+                    { title: 'Set Subscriber ID', detail: 'The system auto-generates a Subscriber ID, or you can enter a custom one (e.g., 1001, CUST-01).' },
+                    { title: 'Choose a Package', detail: 'Select the subscription package/plan for this customer from the <strong>Package</strong> dropdown.' },
+                    { title: 'Save', detail: 'Click <strong>Save</strong> or <strong>Submit</strong>. The new customer will now appear in the customer list.' }
+                ]
+            },
+            'record-payment': {
+                icon: '💳',
+                title: 'Record a Payment',
+                desc: 'Collect and record customer payments',
+                tryQuery: 'show recent payments',
+                steps: [
+                    { title: 'Find the Customer', detail: 'Go to <strong>Customers → Customer</strong> and search for the customer by name or subscriber ID.' },
+                    { title: 'Open Their Profile', detail: 'Click on the customer\'s <strong>Subscriber ID</strong> to open their profile page.' },
+                    { title: 'Go to Billing Tab', detail: 'Inside the profile, click on the <strong>Billing</strong> or <strong>Payments</strong> tab.' },
+                    { title: 'Click "Collect Payment"', detail: 'Click the <strong>Collect Payment</strong> button. A form will appear.' },
+                    { title: 'Enter Amount & Method', detail: 'Enter the <strong>amount</strong> and select the payment method: <strong>Cash, UPI, Card, or Bank Transfer</strong>.' },
+                    { title: 'Confirm', detail: 'Click <strong>Confirm</strong> or <strong>Save</strong>. The payment is recorded and a receipt can be sent via WhatsApp/SMS.' },
+                ]
+            },
+            'create-invoice': {
+                icon: '🧾',
+                title: 'Create an Invoice',
+                desc: 'Generate billing invoices for customers',
+                tryQuery: 'show all invoices',
+                steps: [
+                    { title: 'Navigate to Billing', detail: 'Click <strong>Billing</strong> in the left sidebar.' },
+                    { title: 'Click "New Invoice"', detail: 'Click the <strong>Add Invoice</strong> or <strong>+ New</strong> button.' },
+                    { title: 'Select Customer', detail: 'Search and select the <strong>customer</strong> you want to bill.' },
+                    { title: 'Add Line Items', detail: 'Add the <strong>service/package</strong> as a line item. Set quantity and price if required.' },
+                    { title: 'Set Due Date', detail: 'Set the invoice <strong>due date</strong>. You can also add a description or notes.' },
+                    { title: 'Send or Save', detail: 'Click <strong>Save</strong> to store the invoice, or <strong>Send</strong> to deliver it to the customer via email/WhatsApp.', tip: '💡 Tip: Recurring invoices can be set up from the Settings section to auto-generate monthly.' }
+                ]
+            },
+            'manage-subscription': {
+                icon: '📦',
+                title: 'Manage Subscriptions',
+                desc: 'Activate, renew or cancel a plan',
+                tryQuery: 'show subscriptions',
+                steps: [
+                    { title: 'Go to Customer Profile', detail: 'Navigate to <strong>Customers → Customer</strong> and open the subscriber\'s profile.' },
+                    { title: 'Open Subscriptions Tab', detail: 'Click the <strong>STB/Modem</strong> or <strong>Subscription</strong> tab inside the profile.' },
+                    { title: 'Activate a Plan', detail: 'Click <strong>Add Subscription</strong>, select a package, and set the <strong>start date</strong>. Click Save.' },
+                    { title: 'Renew a Plan', detail: 'Find the existing subscription and click <strong>Renew</strong>. Confirm the renewal period.' },
+                    { title: 'Cancel/Deactivate', detail: 'Click <strong>Deactivate</strong> or <strong>Cancel</strong> next to the subscription. Add a reason if required.' },
+                    { title: 'Check Status', detail: 'The customer status updates automatically to <strong>Active</strong> or <strong>Inactive</strong> based on their subscription.', tip: '💡 Use the AI chatbot to ask: "Show all customers with expiring subscriptions today"' }
+                ]
+            },
+            'add-complaint': {
+                icon: '🛠️',
+                title: 'Log a Complaint',
+                desc: 'Record and track customer complaints',
+                tryQuery: 'show open complaints',
+                steps: [
+                    { title: 'Go to Complaints', detail: 'Click <strong>Complaints</strong> in the left sidebar.' },
+                    { title: 'Click "Add Complaint"', detail: 'Click the <strong>+ Add</strong> or <strong>New Complaint</strong> button.' },
+                    { title: 'Select Customer', detail: 'Search and select the <strong>customer</strong> lodging the complaint.' },
+                    { title: 'Choose Problem Type', detail: 'Select the <strong>Problem Type</strong> (e.g., No Signal, Speed Issue, Billing Error) from the dropdown.' },
+                    { title: 'Add Description', detail: 'Enter a brief <strong>description</strong> of the issue. Assign it to a <strong>staff member</strong> if needed.' },
+                    { title: 'Save & Track', detail: 'Click <strong>Save</strong>. The complaint is now logged with status <strong>Open</strong>. Track resolution under the Complaints section.', tip: '💡 Ask the AI: "Show me all unresolved complaints"' }
+                ]
+            },
+            'view-reports': {
+                icon: '📊',
+                title: 'View Reports',
+                desc: 'Access payment and customer analytics',
+                tryQuery: 'show collection this month',
+                steps: [
+                    { title: 'Go to Reports', detail: 'Click <strong>Reports</strong> in the left sidebar.' },
+                    { title: 'Choose Report Type', detail: 'Select from: <strong>Collection Report, Payment Due, Customer Report, STB Report</strong>, etc.' },
+                    { title: 'Set Date Range', detail: 'Use the date picker to filter data by day, week, month, or custom range.' },
+                    { title: 'Apply Filters', detail: 'Filter by <strong>Area, Agent, Package</strong>, or <strong>Status</strong> to narrow results.' },
+                    { title: 'Export Data', detail: 'Click <strong>Export</strong> to download the report as <strong>Excel or PDF</strong>.' },
+                    { title: 'Use the AI for Quick Insights', detail: 'Instead of navigating reports, ask the AI chatbot directly!', tip: '💡 Try: "Total collection this month" or "Who has overdue payments?" or "Show income summary for May"' }
+                ]
+            },
+            'ai-chatbot': {
+                icon: '🤖',
+                title: 'Using the AI Chatbot',
+                desc: 'Tips to get the best from the AI assistant',
+                tryQuery: 'How many active customers?',
+                steps: [
+                    { title: 'Ask about Customers', detail: 'Type a customer name or query like: <strong>"Show me details of Jinto"</strong> or <strong>"phone number of advaith"</strong>.', tip: '💡 Use first name only — the AI will resolve the full name automatically.' },
+                    { title: 'Ask Follow-up Questions', detail: 'After getting a customer profile, ask follow-ups like <strong>"his payment history"</strong> or <strong>"his subscriber id"</strong> — the AI remembers context.' },
+                    { title: 'Get Business Stats', detail: 'Ask: <strong>"How many active customers?"</strong>, <strong>"Total collection this month"</strong>, or <strong>"Who has the highest dues?"</strong>' },
+                    { title: 'Compare Customers', detail: 'Ask: <strong>"Compare Jinto and Advaith"</strong> to get a side-by-side comparison table of both customers.' },
+                    { title: 'Filter Customers', detail: 'Ask: <strong>"Show customers with high payment due"</strong> or <strong>"List inactive customers"</strong> to filter and view sorted lists.' },
+                    { title: 'Use Voice Input', detail: 'Click the 🎙️ microphone icon to speak your query instead of typing. Speaks clearly and the AI will respond.', tip: '💡 Voice works best in Chrome browser on desktop or Android.' }
+                ]
+            },
+            'contact-us': {
+                icon: '📞',
+                title: 'Contact Us',
+                desc: 'Get in touch with BillerQ support team',
+                steps: [
+                    { title: 'Email Support', detail: 'Email us at <a href="mailto:info@billerq.com" style="color: var(--primary-light); font-weight: bold; text-decoration: underline;">info@billerq.com</a> for any queries, requests, or technical issues.' },
+                    { title: 'Call Support', detail: 'Talk to us directly at <a href="tel:+917012733393" style="color: var(--primary-light); font-weight: bold; text-decoration: underline;">+91 7012733393</a> for immediate help.' },
+                    { title: 'Online Contact Page', detail: 'Visit our contact page on the web: <a href="https://billerq.com/contact.php" target="_blank" style="color: var(--primary-light); font-weight: bold; text-decoration: underline;">billerq.com/contact.php</a>.' }
+                ]
+            }
+        };
+
+        const guidePanel    = document.getElementById('guidePanel');
+        const guidBtn       = document.getElementById('guidBtn');
+        const guideCloseBtn = document.getElementById('guideCloseBtn');
+        const guideBackBtn  = document.getElementById('guideBackBtn');
+        const guidePanelTitle = document.getElementById('guidePanelTitle');
+        const guideTopicList  = document.getElementById('guideTopicList');
+        const guideStepsView  = document.getElementById('guideStepsView');
+
+        function openGuide() {
+            showTopicList();
+            guidePanel.classList.add('open');
+        }
+        function closeGuide() {
+            guidePanel.classList.remove('open');
+        }
+        function showTopicList() {
+            guideTopicList.style.display = 'block';
+            guideStepsView.style.display = 'none';
+            guideStepsView.classList.remove('active');
+            guideBackBtn.style.display = 'none';
+            guidePanelTitle.textContent = '📖 BillerQ Guide';
+        }
+        function showSteps(topicKey) {
+            const topic = GUIDE_TOPICS[topicKey];
+            if (!topic) return;
+            guidePanelTitle.textContent = topic.title;
+            guideBackBtn.style.display = 'flex';
+            guideTopicList.style.display = 'none';
+
+            let html = `
+                <div class="guide-topic-banner">
+                    <div class="guide-topic-banner-icon">${topic.icon}</div>
+                    <div>
+                        <div class="guide-topic-banner-title">${topic.title}</div>
+                        <div class="guide-topic-banner-sub">${topic.desc}</div>
+                    </div>
+                </div>
+                <div class="guide-steps-list">
+            `;
+            topic.steps.forEach((step, i) => {
+                html += `
+                    <div class="guide-step">
+                        <div class="guide-step-num">${i + 1}</div>
+                        <div class="guide-step-body">
+                            <div class="guide-step-title">${step.title}</div>
+                            <div class="guide-step-detail">${step.detail}</div>
+                            ${step.tip ? `<div class="guide-step-tip">${step.tip}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            if (topic.tryQuery) {
+                html += `<button class="guide-try-btn" data-query="${topic.tryQuery}">💬 Try it in Chat</button>`;
+            }
+
+            guideStepsView.innerHTML = html;
+            guideStepsView.style.display = 'block';
+            guideStepsView.classList.add('active');
+            document.getElementById('guideContent').scrollTop = 0;
+
+            // "Try in chat" button handler
+            const tryBtn = guideStepsView.querySelector('.guide-try-btn');
+            if (tryBtn) {
+                tryBtn.addEventListener('click', () => {
+                    const q = tryBtn.getAttribute('data-query');
+                    closeGuide();
+                    chatInput.value = q;
+                    sendBtn.disabled = false;
+                    chatInput.focus();
+                });
+            }
+        }
+
+        guidBtn.addEventListener('click', openGuide);
+        guideCloseBtn.addEventListener('click', closeGuide);
+        guideBackBtn.addEventListener('click', showTopicList);
+
+        document.getElementById('guideContent').addEventListener('click', (e) => {
+            const item = e.target.closest('.guide-topic-item');
+            if (item) showSteps(item.getAttribute('data-topic'));
+        });
+
+        // ============================================================
+        // Contact Us Overlay Actions
+        // ============================================================
+        if (contactBtn && contactOverlay) {
+            contactBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                contactOverlay.classList.add('open');
+            });
+        }
+
+        if (contactCloseBtn && contactOverlay) {
+            contactCloseBtn.addEventListener('click', () => {
+                contactOverlay.classList.remove('open');
+            });
+        }
+
+        if (contactOverlay) {
+            contactOverlay.addEventListener('click', (e) => {
+                if (e.target === contactOverlay) {
+                    contactOverlay.classList.remove('open');
+                }
+            });
+        }
+
+        // Initial auth and welcome message load on startup
+        updateAuthUI();
+
+    })();
+    </script>
+</body>
+</html>

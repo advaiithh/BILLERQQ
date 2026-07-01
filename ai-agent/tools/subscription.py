@@ -58,6 +58,16 @@ async def get_pending_subscriptions() -> dict:
     return await api_client.get("get_pending_subscriptions")
 
 
+async def get_recurring_data() -> dict:
+    """Get list of recurring invoice profiles / billing records.
+
+    Returns:
+        Recurring data list.
+    """
+    logger.info("Getting recurring data list")
+    return await api_client.get("get_recurring_data")
+
+
 async def get_subscription_report() -> dict:
     """Get subscription report data.
 
@@ -92,3 +102,23 @@ async def get_addon_history(customer_id: int) -> dict:
     """
     logger.info("Getting add-on history for customer ID: %d", customer_id)
     return await api_client.get("addon_history", params={"customer_id": customer_id})
+
+
+async def get_items() -> dict:
+    """Get all items.
+
+    Returns:
+        List of items.
+    """
+    logger.info("Getting all items")
+    return await api_client.get("show_item")
+
+
+async def get_all_addons() -> dict:
+    """Get all add-ons.
+
+    Returns:
+        Add-ons list.
+    """
+    logger.info("Getting all add-ons")
+    return await api_client.get("show_addon")

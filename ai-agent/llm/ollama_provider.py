@@ -25,6 +25,7 @@ class OllamaProvider(BaseLLM):
         prompt: str,
         system: str = "",
         temperature: float = 0.3,
+        num_predict: int = 400,
     ) -> str:
         """Generate a text response using Ollama."""
         messages = []
@@ -36,7 +37,7 @@ class OllamaProvider(BaseLLM):
             response = await self.client.chat(
                 model=self.model,
                 messages=messages,
-                options={"temperature": temperature},
+                options={"temperature": temperature, "num_predict": num_predict},
             )
             content = response["message"]["content"]
 
@@ -61,13 +62,14 @@ class OllamaProvider(BaseLLM):
         prompt: str,
         system: str = "",
         temperature: float = 0.1,
+        num_predict: int = 400,
     ) -> dict:
         """Generate a structured JSON response using Ollama.
 
         Extracts JSON from the response even if the model wraps it
         in markdown code fences or extra text.
         """
-        raw = await self.generate(prompt, system, temperature)
+        raw = await self.generate(prompt, system, temperature, num_predict)
 
         # Try direct parse first
         try:
@@ -93,3 +95,80 @@ class OllamaProvider(BaseLLM):
 
         logger.error("Failed to parse JSON from LLM response: %s", raw[:200])
         return {"error": "Failed to parse structured response", "raw": raw}
+
+    async def chat(
+        self,
+        messages: list,
+        temperature: float = 0.3,
+        num_predict: int = 400,
+    ) -> str:
+        """Generate a chat response using a list of messages.
+
+        Args:
+            messages: List of message dictionaries, e.g. [{"role": "user", "content": "..."}]
+            temperature: Sampling temperature.
+            num_predict: Maximum number of tokens to predict/generate.
+
+        Returns:
+            The generated text response.
+        """
+        try:
+            response = await self.client.chat(
+                model=self.model,
+                messages=messages,
+                options={"temperature": temperature, "num_predict": num_predict},
+            )
+            content = response["message"]["content"]
+
+            # Clean any leftover think tags (unlikely for Mistral but keeps it safe)
+            content = re.sub(
+                r"<think>.*?</think>",
+                "",
+                content,
+                flags=re.DOTALL,
+            ).strip()
+
+            logger.debug("Ollama chat response length: %d chars", len(content))
+            return content
+
+        except Exception as e:
+            logger.error("Ollama chat failed: %s", str(e))
+            raise RuntimeError(f"LLM chat failed: {str(e)}") from e
+
+    async def chat_json(
+        self,
+        messages: list,
+        temperature: float = 0.1,
+        num_predict: int = 400,
+    ) -> dict:
+        """Generate a structured JSON response from a chat session.
+
+        Extracts JSON from the response.
+        """
+        raw = await self.chat(messages, temperature, num_predict)
+
+        # Try direct parse first
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            pass
+
+        # Try extracting from markdown code fences: ```json ... ``` or ``` ... ```
+        json_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", raw, re.DOTALL)
+        if json_match:
+            try:
+                return json.loads(json_match.group(1).strip())
+            except json.JSONDecodeError:
+                pass
+
+        # Try finding any JSON object in the response
+        brace_match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if brace_match:
+            try:
+                return json.loads(brace_match.group(0))
+            except json.JSONDecodeError:
+                pass
+
+        logger.error("Failed to parse JSON from LLM chat response: %s", raw[:200])
+        return {"error": "Failed to parse structured response", "raw": raw}
+

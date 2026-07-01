@@ -1,0 +1,146 @@
+{
+  "show_customer": {
+    "description": "Retrieve a list of customers, optionally paginated or filtered by search value or status.",
+    "endpoint": "/admin/show-customer",
+    "inputs": ["page", "search_value", "status"],
+    "outputs": ["id", "subscriber_id", "first_name", "last_name", "mobile", "area_name", "status"]
+  },
+  "get_customer_profile": {
+    "description": "Get the detailed profile of a specific customer using their ID.",
+    "endpoint": "/admin/get-customer-profile",
+    "inputs": ["customer_id"],
+    "outputs": ["id", "subscriber_id", "first_name", "last_name", "mobile", "email", "address", "area_name", "stb_no", "dues", "status"]
+  },
+  "payment_history": {
+    "description": "Retrieve the payment history logs for a specific customer.",
+    "endpoint": "/admin/get-customer-payment-history",
+    "inputs": ["customer_id"],
+    "outputs": ["id", "amount", "payment_date", "payment_mode"]
+  },
+  "get_recent_payment": {
+    "description": "Get a list of all recent payments made across the entire system.",
+    "endpoint": "/admin/get-recent-payment",
+    "inputs": [],
+    "outputs": ["id", "customer_name", "amount", "payment_date"]
+  },
+  "get_unpaid_customers": {
+    "description": "Retrieve a list of customers who have unpaid or outstanding dues.",
+    "endpoint": "/admin/get-unpaid-customers",
+    "inputs": [],
+    "outputs": ["id", "name", "mobile", "balance"]
+  },
+  "show_subscription": {
+    "description": "Retrieve active subscription details for a specific customer.",
+    "endpoint": "/admin/show-customer-subscription",
+    "inputs": ["customer_id"],
+    "outputs": ["id", "package_name", "status", "start_date", "end_date"]
+  },
+  "get_pending_subscriptions": {
+    "description": "Retrieve a list of pending/not-yet-activated subscriptions across the system.",
+    "endpoint": "/admin/get-pending-subscription-list",
+    "inputs": [],
+    "outputs": ["id", "customer_name", "package_name", "status"]
+  },
+  "get_complaint": {
+    "description": "Retrieve a list of all customer complaints, including their status and details.",
+    "endpoint": "/admin/get-complaint",
+    "inputs": [],
+    "outputs": ["id", "complaint_no", "customer_name", "problem_type", "status", "area_name"]
+  },
+  "complaint_status_count": {
+    "description": "Get count of customer complaints grouped by status (Open, Closed, In Progress).",
+    "endpoint": "/admin/complaint-status-count",
+    "inputs": [],
+    "outputs": ["status", "count"]
+  },
+  "overdues": {
+    "description": "Retrieve overdue summary counts and a list of overdue customers.",
+    "endpoint": "/admin/overdues",
+    "inputs": [],
+    "outputs": ["count", "data"]
+  },
+  "get_single_stb": {
+    "description": "Retrieve set-top box details for a customer.",
+    "endpoint": "/admin/get-single-customer-stb",
+    "inputs": ["customer_id"],
+    "outputs": ["stb_no", "status", "card_no"]
+  },
+  "get_customer_status_count": {
+    "description": "Get count of customers grouped by status (Active, Inactive, Suspended, Archived, etc.).",
+    "endpoint": "/admin/get-customer-status-wise-count",
+    "inputs": [],
+    "outputs": ["status", "count"]
+  },
+  "get_connection_data": {
+    "description": "Get subscription counts by connection type and system-wide monthly collections.",
+    "endpoint": "/admin/get-connection-data",
+    "inputs": [],
+    "outputs": ["connections", "collection_meter", "collection_this_month_meter", "collection_chart", "agent_collection"]
+  },
+  "get_dashboard_data": {
+    "description": "Get high-level dashboard data: complaints summary, expired/upcoming subscriptions, collections today/this month, and customer counts.",
+    "endpoint": "/admin/get-data",
+    "inputs": [],
+    "outputs": ["complaints", "subscriptions", "payment_collection", "check_condition", "recurring_count"]
+  },
+  "package_report": {
+    "description": "Retrieve package distribution report showing unit price, invoice count, and revenue per package.",
+    "endpoint": "/admin/get-package-report",
+    "inputs": [],
+    "outputs": ["package_name", "invoice_count", "grand_total"]
+  },
+  "wallet_report": {
+    "description": "Retrieve wallet balance transactions and balances per customer.",
+    "endpoint": "/admin/get-wallet-report",
+    "inputs": [],
+    "outputs": ["customer_name", "amount", "date", "subscriber_id"]
+  },
+  "tax_report": {
+    "description": "Retrieve tax collections report.",
+    "endpoint": "/admin/get-tax-report",
+    "inputs": [],
+    "outputs": ["tax_name", "tax_amount"]
+  },
+  "addon_report": {
+    "description": "Retrieve add-on subscription report.",
+    "endpoint": "/admin/get-add-on-report",
+    "inputs": [],
+    "outputs": ["addon_name", "subscriber_count"]
+  },
+  "subscription_report": {
+    "description": "Retrieve subscription analytics report.",
+    "endpoint": "/admin/get-subscription-report",
+    "inputs": [],
+    "outputs": ["active_subscribers", "inactive_subscribers"]
+  },
+  "agent_collection_report": {
+    "description": "Retrieve agent collection breakdown.",
+    "endpoint": "/admin/get-agent-collection-report",
+    "inputs": [],
+    "outputs": ["agent_name", "collected_amount"]
+  },
+  "income_summary_report": {
+    "description": "Retrieve income summary report.",
+    "endpoint": "/admin/get-income-summary-report",
+    "inputs": [],
+    "outputs": ["month", "income_amount"]
+  },
+  "expense_summary_report": {
+    "description": "Retrieve expense summary report.",
+    "endpoint": "/admin/get-expense-summary-report",
+    "inputs": [],
+    "outputs": ["month", "expense_amount"]
+  },
+  "view_area": {
+    "description": "Retrieve a list of all areas/zones registered in the system.",
+    "endpoint": "/admin/view-area",
+    "inputs": [],
+    "outputs": ["id", "area_name"]
+  },
+  "view_package": {
+    "description": "Retrieve a list of all packages registered in the system.",
+    "endpoint": "/admin/view-package",
+    "inputs": [],
+    "outputs": ["id", "package_name", "price"]
+  }
+}

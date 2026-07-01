@@ -11,6 +11,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -21,6 +22,8 @@ from agent.executor import Executor
 from agent.formatter import Formatter
 from agent.memory import memory_manager
 from api.client import api_client
+from agent.agent_loop import BillerQAgent
+
 
 load_dotenv()
 
@@ -98,6 +101,50 @@ llm = _create_llm()
 planner = Planner(llm)
 executor = Executor()
 formatter = Formatter(llm)
+agent = BillerQAgent(llm)
+
+
+def _build_redirect_metadata(intent: str, plan: dict, result: dict, customer_id: str | None):
+    """Map intent/plan/result to a frontend route and label for quick navigation.
+
+    Returns a dict with optional `redirect_url` and `redirect_label`.
+    """
+    if not intent:
+        return {}
+
+    # Normalize
+    intent = intent.upper()
+
+    # Reports mapping by report_type entity
+    report_map = {
+        "package": "/report/package-summary",
+        "wallet": "/report/wallet-balance",
+        "tax": "/report/tax-report",
+    }
+
+    # Intent -> route
+    if intent == "ACTIVE_CUSTOMERS":
+        return {"redirect_url": "/customers/customer", "redirect_label": "View customers"}
+    if intent == "REPORT":
+        report_type = (plan or {}).get("entities", {}).get("report_type")
+        if report_type and report_type in report_map:
+            return {"redirect_url": report_map[report_type], "redirect_label": "View report"}
+        return {"redirect_url": "/report/package-summary", "redirect_label": "View report"}
+    if intent == "UNPAID_CUSTOMERS":
+        return {"redirect_url": "/report/unpaid-customer", "redirect_label": "View unpaid customers"}
+    if intent == "OVERDUE":
+        return {"redirect_url": "/report/payment-due", "redirect_label": "View overdue payments"}
+    if intent == "ANALYTICS":
+        return {"redirect_url": "/dashboard/default", "redirect_label": "Open analytics"}
+    if intent in ("INVOICE_DETAIL", "INVOICE_SUMMARY"):
+        invoice_id = (result or {}).get("invoice_id")
+        if customer_id and invoice_id:
+            return {
+                "redirect_url": f"/customers/{customer_id}/invoices/{invoice_id}",
+                "redirect_label": "View invoice",
+            }
+
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +159,14 @@ class ChatRequest(BaseModel):
     billerq_token: str = Field(
         default="",
         description="Optional BillerQ bearer token from the logged-in frontend session",
+    )
+    billerq_api_url: str = Field(
+        default="",
+        description="Optional BillerQ API URL from the logged-in frontend session",
+    )
+    billerq_user_role: int | None = Field(
+        default=None,
+        description="Optional BillerQ user role from the logged-in frontend session",
     )
 
 
@@ -134,96 +189,99 @@ async def health_check():
     }
 
 
+@app.get("/", include_in_schema=False)
+async def root_redirect():
+    """Redirect root to the chat widget for convenience in local development."""
+    return RedirectResponse(url="/widget")
+
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Main chat endpoint — processes user messages through the AI pipeline.
+    """Main chat endpoint — processes user messages through the AI agent loop.
 
     Pipeline:
-        1. Load/create session memory
-        2. Resolve pronouns using conversation context
-        3. Plan: classify intent + extract entities via LLM
-        4. Execute: call the appropriate BillerQ API(s)
-        5. Format: convert raw data to human-friendly text
-        6. Update memory with results
+        1. Load/create session memory.
+        2. Resolve pronouns using context.
+        3. Check BillerQ auth.
+        4. Run BillerQAgent to dynamically execute tool calls and generate final summary.
+        5. Save state and return response.
     """
     message = request.message.strip()
     session_id = request.session_id
 
-    logger.info("Chat request: session=%s, message='%s'", session_id, message[:100])
+    # Log request parameters (safely log token prefix/suffix)
+    token_log = "None"
+    if request.billerq_token:
+        token_log = f"{request.billerq_token[:10]}...{request.billerq_token[-10:]}" if len(request.billerq_token) > 20 else "short_token"
+    logger.info("Chat request: session=%s, message='%s', api_url=%s, role=%s, token=%s", 
+                session_id, message[:100], request.billerq_api_url, request.billerq_user_role, token_log)
 
     try:
         # Step 1: Load session memory
         memory = memory_manager.get_session(session_id)
+
+        # Safety Check for illegal/malicious activities
+        message_lower = message.lower()
+        unsafe_keywords = [
+            "drop table", "drop database", "delete database", "delete table",
+            "hack", "crack password", "bypass admin", "bypass login", 
+            "steal data", "steal customer", "forge invoice", "forge payment",
+            "fake invoice", "fake payment", "illegal activity", "make illegal",
+            "sql injection", "database injection"
+        ]
+        if any(kw in message_lower for kw in unsafe_keywords):
+            response_text = "I cannot perform those actions. Please contact your BillerQ administrator or support for assistance."
+            memory.add_turn(message, response_text)
+            return ChatResponse(
+                response=response_text,
+                session_id=session_id,
+                metadata={"safety_blocked": True}
+            )
 
         # Step 2: Resolve pronouns (his → Joy P's)
         resolved_message = memory.resolve_pronoun(message)
         if resolved_message != message:
             logger.info("Pronoun resolved: '%s' → '%s'", message, resolved_message)
 
-        # Step 3: Plan — classify intent and extract entities
-        context = memory.get_context()
-        plan = await planner.plan(resolved_message, context)
-
-        intent = plan.get("intent", "UNKNOWN")
-
-        # Handle UNKNOWN intent
-        if intent == "UNKNOWN":
+        # Check BillerQ authorization token
+        if not request.billerq_token and not api_client.auto_login:
             response_text = (
-                "I'm not quite sure what you're asking. I can help you with:\n\n"
-                "• Customer info — \"Show customer Joy P\"\n"
-                "• Payment history — \"Show payment history of Joy P\"\n"
-                "• Subscriptions — \"Show Joy P's subscription\"\n"
-                "• Overdue payments — \"Who has overdue payments?\"\n"
-                "• Reports — \"Show package report\"\n"
-                "• Comparisons — \"Compare Joy P and Abhi\"\n"
-                "• Analytics — \"How many active customers?\"\n\n"
-                "Try asking one of these!"
+                "Please log in to BillerQ first. Use the login panel in the widget "
+                "or send a valid frontend session token."
             )
             memory.add_turn(message, response_text)
             return ChatResponse(
                 response=response_text,
                 session_id=session_id,
-                metadata={"intent": "UNKNOWN", "plan": plan},
+                metadata={"error": "login_required"},
             )
 
-        # Step 4: Execute — call the right API(s)
-        result = await executor.execute(plan, memory, billerq_token=request.billerq_token)
+        # Run the BillerQ Agent loop
+        context = memory.get_context()
+        response_text, metadata = await agent.run(
+            message=resolved_message,
+            context=context,
+            billerq_token=request.billerq_token,
+            billerq_api_url=request.billerq_api_url,
+            billerq_user_role=request.billerq_user_role
+        )
 
-        # Step 5: Format — make it human-readable
-        if result.get("success"):
-            response_text = await formatter.format_response(
-                intent=intent,
-                data=result.get("data", {}),
-                original_message=message,
-                customer_name=result.get("customer_name"),
+        # Step 3: Update session memory with details resolved by agent
+        if metadata.get("customer_id") and metadata.get("customer_name"):
+            memory.update_customer(
+                metadata["customer_id"],
+                metadata["customer_name"],
             )
 
-            # Update memory with the resolved customer
-            if result.get("customer_id"):
-                memory.update_customer(
-                    result["customer_id"],
-                    result["customer_name"],
-                )
-        else:
-            # Format error response
-            response_text = await formatter.format_error(
-                error_message=result.get("error", "Something went wrong."),
-                candidates=result.get("candidates"),
-            )
-
-        # Step 6: Update memory
-        memory.update_intent(intent)
+        # Save turn to conversation memory
         memory.add_turn(message, response_text)
 
         return ChatResponse(
             response=response_text,
             session_id=session_id,
-            metadata={
-                "intent": intent,
-                "customer_id": result.get("customer_id"),
-                "customer_name": result.get("customer_name"),
-            },
+            metadata=metadata,
         )
+
 
     except Exception as e:
         logger.exception("Unhandled error in chat pipeline")
@@ -243,3 +301,26 @@ async def serve_widget():
     if os.path.exists(widget_path):
         return FileResponse(widget_path, media_type="text/html")
     raise HTTPException(status_code=404, detail="Chat widget not found")
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(..., description="BillerQ login email")
+    password: str = Field(..., description="BillerQ login password")
+
+
+class LoginResponse(BaseModel):
+    token: str = Field(..., description="BillerQ bearer token")
+    message: str = Field(..., description="Login status message")
+
+
+@app.post("/login", response_model=LoginResponse)
+async def login(payload: LoginRequest):
+    """Manual login endpoint for BillerQ credentials."""
+    try:
+        token = await api_client.login(payload.email, payload.password)
+        return LoginResponse(
+            token=token,
+            message="Login successful. Use this token for subsequent /chat requests.",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))

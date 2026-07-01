@@ -1,0 +1,18 @@
+
+--- Chat Request ---
+Message: Show recent payments
+billerq_token: 7843|K6Eta2YBq9F9Rd0hppIHawUnfOdtZw9yGkBt4UwG
+billerq_api_url: https://customerapi.billerq.com/api
+billerq_user_role: 1
+
+--- Chat Request ---
+Message: active customers
+billerq_token: 7843|K6Eta2YBq9F9Rd0hppIHawUnfOdtZw9yGkBt4UwG
+billerq_api_url: https://customerapi.billerq.com/api
+billerq_user_role: 1
+
+--- Chat Request ---
+Message: names
+billerq_token: 7843|K6Eta2YBq9F9Rd0hppIHawUnfOdtZw9yGkBt4UwG
+billerq_api_url: https://customerapi.billerq.com/api
+billerq_user_role: 1
