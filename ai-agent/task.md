@@ -1,0 +1,13 @@
+- [x] Implement enhanced customer name extraction and cleanup in `agent_loop.py`
+- [x] Prevent context fallback for general/plural queries in `agent_loop.py`
+- [x] Implement combined subscription & addon query fast-routing and logic in `agent_loop.py`
+- [x] Implement total items query fast-routing and rule-based formatter in `agent_loop.py`
+- [x] Verify all queries using `verify_guides.py`
+- [x] Fix agent collection report keys (use `collected_by` instead of `account_name`) in `agent_loop.py`
+- [x] Improve agent name resolution to strip common words in `agent_loop.py`
+- [x] Fix guide query hijacking for common phrases (what is, where is)
+- [x] Fix customer status count formatter to output direct count summary
+- [x] Add capabilities guide fallback for generic help queries (what can you do)
+- [x] Handle general agent queries (each agent, all agents) in routing and agent resolver
+- [x] Remove rule-based formatter bypass and integrate reference templates into the Formatter LLM
+- [x] Route general conversational queries through Formatter LLM instead of falling back to default dashboard error
