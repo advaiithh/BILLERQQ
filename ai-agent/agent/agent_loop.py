@@ -1091,7 +1091,7 @@ class BillerQAgent:
 
             # If it is agent collection report, we resolve agent name to user_id
             if tool_name == "get_agent_collection_report" and customer_name_query:
-                if any(w in str(customer_name_query).lower() for w in ["all", "each", "every", "according to", "agents"]):
+                if any(w in str(customer_name_query).lower() for w in ["all", "each", "every", "according to", "agents", "agent wise", "agentwise", "wise", "by agent"]):
                     customer_name_query = None
                     resolved_agent_name = None
                     resolved_agent_id = None
@@ -2075,6 +2075,8 @@ class BillerQAgent:
                     if filter_agent:
                         filter_agent_lower = str(filter_agent).lower().strip()
                         filter_agent_lower = re.sub(r"\b(report|of|for|by|agent)\b", "", filter_agent_lower).strip()
+                        if filter_agent_lower in ["wise", "agent wise", "agentwise", "all", "each", "every", ""]:
+                            filter_agent_lower = None
                     else:
                         filter_agent_lower = None
                         
