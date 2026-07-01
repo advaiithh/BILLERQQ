@@ -2109,17 +2109,85 @@ class BillerQAgent:
                         if not payments_list:
                             rule_based_response = "No agent payments reported."
                         else:
-                            time_label = "this month"
+                            # Auto-detect target month and year from first payment if none is explicitly specified
+                            first_date = payments_list[0].get("paid_date") or ""
+                            parts = first_date.split("-")
+                            if len(parts) == 3:
+                                target_month = parts[1] # e.g. "June"
+                                target_year = parts[2]  # e.g. "2026"
+                            else:
+                                target_month = "June"
+                                target_year = "2026"
+
+                            # Parse time constraints from query
+                            time_label = f"{target_month} {target_year}"
+                            filter_year = None
+                            filter_month = None
+
                             if "last year" in msg_lower or "2025" in msg_lower:
-                                time_label = "last year (2025)"
+                                time_label = "2025"
+                                filter_year = "2025"
                             elif "this year" in msg_lower or "2026" in msg_lower:
-                                time_label = "this year (2026)"
+                                time_label = "2026"
+                                filter_year = "2026"
                             elif "2024" in msg_lower:
                                 time_label = "2024"
+                                filter_year = "2024"
+                            else:
+                                filter_month = target_month
+                                filter_year = target_year
+
+                            # Aggregate totals
+                            agent_totals = {}
+                            for p in payments_list:
+                                p_date = p.get("paid_date") or ""
+                                p_parts = p_date.split("-")
+                                if len(p_parts) == 3:
+                                    p_month = p_parts[1]
+                                    p_year = p_parts[2]
+                                else:
+                                    continue
                                 
-                            lines = [f"Total Agent Collection ({time_label}): **₹{self._format_curr(total_amount)}**", "\n**Recent Agent collection logs:**"]
+                                # Match year
+                                if filter_year and p_year != filter_year:
+                                    continue
+                                # Match month if specified
+                                if filter_month and p_month.lower() != filter_month.lower():
+                                    continue
+
+                                agent = str(p.get("collected_by") or "").strip()
+                                if not agent:
+                                    agent = "Other/Direct"
+                                try:
+                                    amt = float(str(p.get("collected_amount", 0.0)).replace(",", "").strip())
+                                except Exception:
+                                    amt = 0.0
+                                agent_totals[agent] = agent_totals.get(agent, 0.0) + amt
+
+                            # Sort agents by total collections descending
+                            sorted_agents = sorted(agent_totals.items(), key=lambda x: x[1], reverse=True)
+
+                            # Check if the query asks who has more / highest collections
+                            is_ranking_query = any(k in msg_lower for k in ["whose", "who", "highest", "most", "more", "rank", "top"])
+
+                            lines = []
+                            if is_ranking_query and sorted_agents:
+                                # Find the top actual agent (or just the top entity)
+                                top_agent, top_amt = sorted_agents[0]
+                                lines.append(f"🏆 The agent with the highest collection in **{time_label}** is **{top_agent}** with a total collection of **₹{self._format_curr(top_amt)}**.")
+                                lines.append(f"\nTotal Agent Collection ({time_label}): **₹{self._format_curr(total_amount)}**")
+                            else:
+                                lines.append(f"Total Agent Collection ({time_label}): **₹{self._format_curr(total_amount)}**")
+
+                            if sorted_agents:
+                                lines.append("\n**Collection Breakdown by Agent:**")
+                                for agent, amt in sorted_agents:
+                                    lines.append(f"• **{agent}**: **₹{self._format_curr(amt)}**")
+
+                            lines.append("\n**Recent Agent collection logs:**")
                             for item in payments_list[:5]:
                                 lines.append(f"• Invoice {item.get('invoice_no')}: **₹{item.get('collected_amount')}** from {item.get('customer_name')} (Collected by: {item.get('collected_by') or 'N/A'}, Method: {item.get('account_name')})")
+
                             rule_based_response = "\n".join(lines)
 
                 # 26. get_expense_summary
