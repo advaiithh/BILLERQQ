@@ -1,0 +1,11 @@
+- [x] Add BillerQ founder info to prompts in `agent_loop.py`
+- [x] Add all missing BillerQ API tools to `ROUTER_SYSTEM_PROMPT_TEMPLATE` in `agent_loop.py`
+- [x] Update `blacklist_words` in `agent_loop.py`
+- [x] Reorder routing logic in `agent_loop.py` to run Router LLM first and fallback to fast-routing
+- [x] Create verification script `verify_llm_routing.py`
+- [x] Update agent collection report in `agent_loop.py` to aggregate by agent
+- [x] Integrate Bedrock Provider using Claude 3 Haiku via `boto3`
+- [x] Fix total customer count display in dashboard overview (query `get_customer_status_count` to display 1,927)
+- [x] Implement daily prompt rate limiter per session based on `PROMPT_LIMIT_PER_DAY` in `app.py`
+- [x] Run verification tests and verify results (for both Ollama and Bedrock with actual AWS keys)
+- [x] Update walkthrough

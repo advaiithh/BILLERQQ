@@ -173,10 +173,14 @@ You must also extract arguments for that tool and the customer name/identifier i
 
 Today's Date: {current_date}
 
+BillerQ Platform Info:
+- BillerQ is a Cable TV & Broadband billing and subscription management platform.
+- The founders of BillerQ are Vipin VP (Founder) and Sageesh Thachukuzhiyil (Co-founder).
+
 ## Available Tools:
 1. `get_customer_status_count` - For active/inactive customer counts and percentages.
 2. `get_recent_payments` - To get the most recent payments made.
-3. `get_unpaid_customers` - To get customers with unpaid/outstanding balances.
+3. `get_unpaid_customers` - To get customers with unpaid/outstanding balances. Can take optional boolean "sort_by_balance" argument to sort highest balance first.
 4. `get_overdue_list` - To get a list of overdue payments/collections.
 5. `get_overdues` - To get summary counts of overdue payments.
 6. `get_complaints` - To get lists of customer complaints. Can take optional "status" argument (e.g. "open", "in progress", "closed", "resolved").
@@ -188,18 +192,47 @@ Today's Date: {current_date}
 12. `get_tax_report` - To get tax report/stats.
 13. `get_subscription_report` - To get subscription reports.
 14. `get_addon_report` - To get customer add-on reports.
-15. `get_agent_collection_report` - To get collection details by agents.
-16. `get_income_summary` - To get income summaries/details (do NOT use for daily/monthly collection metrics, use get_dashboard_data instead).
+15. `get_agent_collection_report` - To get collection details by agents. Can take optional "start_date" and "end_date" arguments (format DD-MM-YYYY).
+16. `get_income_summary` - To get monthly income summaries/details (do NOT use for daily/monthly collection metrics, use get_dashboard_data instead). Can take optional "month" (e.g. "May", "Jun") and "year" (e.g. "2026") arguments.
 17. `get_expense_summary` - To get expense summaries/details.
 18. `get_customer_profile` - To get detailed profile/personal info of a specific customer. (Requires a customer name).
 19. `get_payment_history` - To get payment records of a specific customer. (Requires a customer name).
 20. `get_subscription` - To get active subscriptions of a specific customer. (Requires a customer name).
 21. `get_customer_stb` - To get Set-Top Box (STB) details of a specific customer. (Requires a customer name).
 22. `search_customer` - To search/list customers, or if the intent is a general list/search of customer names.
-23. `get_invoices` - To get all invoices/orders in the system or filter invoices/orders for a specific customer.
+23. `get_invoices` - To get all invoices/orders in the system or filter invoices/orders for a specific customer. Can take optional "payment_status" argument (e.g. "paid", "unpaid", "pending").
 24. `get_recurring_data` - To get a list of recurring billing invoice profiles or recurring customers.
+25. `get_staff` - To get the list of staff members/employees and their details.
+26. `get_roles` - To get a list of roles defined for the staff.
+27. `get_items` - To get a list of services/products/items offered in the system.
+28. `get_message_settings` - To get message credit status (SMS/WhatsApp credit balance).
+29. `get_providers` - To get list of CAS/ISP providers.
+30. `get_categories` - To get settings categories.
+31. `get_tax_classes` - To get tax classes and tax rates.
+32. `get_wallets` - To get customer wallet balances.
+33. `get_both_subscription_addon` - Custom tool to list subscribers who have taken both subscription and add-on for a given month. (Do NOT include a customer name).
+34. `get_packages` - To list available packages/plans.
+35. `get_areas` - To list available areas/places.
+36. `get_stb_status_count` - To get counts of Set-Top Boxes (STBs) by their status.
+37. `get_stbs` - To get the list of Set-Top Boxes (STBs).
+38. `get_enquiries` - To list customer enquiries.
+39. `get_leads` - To list sales leads.
+40. `get_followups` - To list follow-ups for payment/leads.
+41. `get_accounts` - To list bank/cash accounts.
+42. `get_transactions` - To list banking/financial transactions.
+43. `get_expenses` - To list recorded expenses.
+44. `get_incomes` - To list recorded incomes.
+45. `get_headers` - To list income/expense headers.
+46. `get_vendors` - To list vendors.
+47. `get_sms_logs` - To view SMS delivery logs. Can take optional "status" argument (e.g. "success", "failed").
+48. `get_whatsapp_logs` - To view WhatsApp message delivery logs. Can take optional "status" argument (e.g. "success", "failed").
+49. `get_cancelled_invoices` - To get a list of cancelled invoices/orders.
+50. `get_pending_subscriptions` - To get a list of pending subscriptions.
+51. `get_online_payments` - To get a list of online payments.
+52. `get_customer_payment_report` - To get a detailed customer payment report.
+53. `get_problem_types` - To get complaint categories/problem types.
 
-If no tool is needed (e.g. general greeting, chit-chat, simple question that doesn't need database access), select "none".
+If no tool is needed (e.g. general greeting, chit-chat, simple question about the company or founders that doesn't need database access), select "none".
 
 ## Rules for Response:
 1. Output ONLY a valid JSON object. Do not include markdown code blocks, explanation, or other text outside of the JSON.
@@ -229,6 +262,10 @@ Your task is to take the user's original query, the name of the executed API too
 Strictly highlight important numbers, counts, customer names, dates, methods, invoice IDs, and statuses in bold using markdown (**text**) to make the response highly readable.
 
 Today's Date: {current_date}
+
+BillerQ Platform Info:
+- BillerQ is a Cable TV & Broadband billing and subscription management platform.
+- The founders of BillerQ are Vipin VP (Founder) and Sageesh Thachukuzhiyil (Co-founder).
 
 ## Strict Formatting Rules:
 1. If the API result contains a list of records (such as unpaid customers, recent payments, overdues, complaints, reports):
@@ -277,7 +314,7 @@ Today's Date: {current_date}
 
 
 class BillerQAgent:
-    """Agent running a structured pipeline using OllamaProvider (Mistral:7b)."""
+    """Agent running a structured pipeline using BedrockProvider (Claude Haiku)."""
 
     def __init__(self, llm):
         self.llm = llm
@@ -292,6 +329,7 @@ class BillerQAgent:
             4. Format and summarize the raw data via Formatter LLM.
         """
         current_date = datetime.now().strftime("%d %B %Y")
+        router_raw = ""
         
         def format_curr(val):
             try:
@@ -408,9 +446,34 @@ class BillerQAgent:
             
             fast_result = None
 
+            # Check for generic capabilities / help queries
+            capabilities_keywords = ["what can you do", "what you can do", "capabilities", "features", "what are you", "what is your function", "who are you"]
+            if any(k in msg_lower for k in capabilities_keywords) or msg_lower in ("help", "help me"):
+                response_text = (
+                    "👋 **Hello! I am your BillerQ AI Assistant. Here is what I can help you with:**\n\n"
+                    "👥 **Customer Management:**\n"
+                    "- Get customer profile details (e.g. *\"Show details of Advaith\"*)\n"
+                    "- Search for active/inactive customers (e.g. *\"List active customers\"*)\n"
+                    "- Retrieve customer STB/Modem info, wallets, and recurring payments\n\n"
+                    "💰 **Billing & Collections:**\n"
+                    "- View active/expired subscriptions\n"
+                    "- Show collections, revenues, and agent reports (e.g. *\"payment collection by Archana\"*)\n"
+                    "- Check overdue payments, unpaid lists, and cancelled invoices\n\n"
+                    "📈 **Reports & Dashboard:**\n"
+                    "- Get income summaries for specific months (e.g. *\"Income summary for May\"*)\n"
+                    "- View dashboard statistics and overview metrics\n\n"
+                    "❓ **How to use:**\n"
+                    "Just ask me questions in natural language, and I will find the information or navigate you to the right page!"
+                )
+                return response_text, {
+                    "redirect_url": "/dashboard/default",
+                    "redirect_label": "View Dashboard"
+                }
+
             # Check for guide / help / tutorial requests first (highest priority)
-            is_guide_query = any(re.search(rf"\b{re.escape(kw)}\b", msg_lower) for kw in ("guide", "how to", "where is", "help me with", "tell me about", "what is", "how do i", "tutorial", "help"))
-            if is_guide_query:
+            is_guide_query = any(re.search(rf"\b{re.escape(kw)}\b", msg_lower) for kw in ("guide", "how to", "how do i", "tutorial"))
+            is_page_guide = ("where is" in msg_lower or "what is" in msg_lower or "how to open" in msg_lower) and any(w in msg_lower for w in ["page", "tab", "button", "section", "menu", "link", "folder"])
+            if is_guide_query or is_page_guide:
                 category = "billerq"
                 if "cust" in msg_lower or "coudt" in msg_lower or "subscr" in msg_lower:
                     category = "customer"
@@ -439,11 +502,17 @@ class BillerQAgent:
             # 1. Collection of agent <name> (resilient to spelling variations of collection/agent keyword)
             agent_col_match = None
             coll_match = re.search(r"\b(?:coll\w*|income|earn\w*)\s+(?:of|by|for)?\s*(?:agent\s+)?([a-zA-Z0-9\u00C0-\u017F\s]+)", msg_lower)
+            coll_match2 = re.search(r"\b([a-zA-Z0-9\u00C0-\u017F\s]+)\s+(?:payment\s+)?(?:coll\w*|income|earn\w*)\b", msg_lower)
             if coll_match:
                 candidate_agent_name = coll_match.group(1).strip()
                 known_agents = ["ashika", "sanjay", "ayush", "kannan", "rajeev", "aju", "kerala vision", "tutu", "archana"]
                 if any(ka in candidate_agent_name.lower() for ka in known_agents) or "agent" in msg_lower:
                     agent_col_match = coll_match
+            elif coll_match2:
+                candidate_agent_name = coll_match2.group(1).strip()
+                known_agents = ["ashika", "sanjay", "ayush", "kannan", "rajeev", "aju", "kerala vision", "tutu", "archana"]
+                if any(ka in candidate_agent_name.lower() for ka in known_agents) or "agent" in msg_lower:
+                    agent_col_match = coll_match2
             
             # 2. Last month collection / specific month collection
             month_match = None
@@ -498,7 +567,7 @@ class BillerQAgent:
                 "detail", "details", "profile", "info", "about", "history", "wallet", "dues", "due", "balance", "who", "has", "have",
                 "phone", "number", "mobile", "contact", "id", "place", "location", "and", "billing", "technical", "closed", "open",
                 "progress", "resolved", "unresolved", "complaints", "complaint", "recurring", "type", "issues", "issue",
-                "get", "find", "search", "lookup", "give", "tell", "me"
+                "get", "find", "search", "lookup", "give", "tell", "me", "staff", "staffs", "role", "roles", "item", "items"
             }
             
             if "'s" in msg_lower:
@@ -651,7 +720,8 @@ class BillerQAgent:
                 fast_result = {"tool": "get_recurring_data", "arguments": {}, "customer_name": name_extracted}
             elif agent_col_match:
                 raw_agent_name = agent_col_match.group(1).strip()
-                agent_name = re.sub(r"\b(report|of|for|by|agent)\b", "", raw_agent_name.lower()).strip()
+                agent_name = re.sub(r"\b(report|of|for|by|agent|tge|the|show|payment|collection)\b", "", raw_agent_name.lower()).strip()
+                agent_name = re.sub(r"\s+", " ", agent_name).strip()
                 # Strip trailing date/time phrases like "in this month", "this year", "last year", etc.
                 agent_name = re.sub(r"\s*(in\s+)?(this|last|previous|next)\s+(month|year|week).*$", "", agent_name).strip()
                 agent_name = re.sub(r"\s*(in\s+)?(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec).*$", "", agent_name).strip()
@@ -743,6 +813,8 @@ class BillerQAgent:
                 elif "recurring" in msg_lower:
                     tool = "get_recurring_data"
                 fast_result = {"tool": tool, "arguments": {}, "customer_name": name_extracted}
+            elif "customer" in msg_lower and ("count" in msg_lower or "how many" in msg_lower or "total" in msg_lower or "number of" in msg_lower) and not any(k in msg_lower for k in ["list", "show", "view", "details"]):
+                fast_result = {"tool": "get_customer_status_count", "arguments": {}, "customer_name": None}
             elif re.search(r"\bhow\s+many\s+(?:active|inactive|total)\b", msg_lower) or re.search(r"\b(?:active|inactive|total)\s+customers?\s+count\b", msg_lower):
                 fast_result = {"tool": "get_customer_status_count", "arguments": {}, "customer_name": None}
             elif re.search(r"\b(active|inactive|total)\s+customers?\b", msg_lower) or re.search(r"\bhow many active\b", msg_lower):
@@ -799,7 +871,7 @@ class BillerQAgent:
                 fast_result = {"tool": "get_addon_report", "arguments": {}, "customer_name": None}
             elif "subscription report" in msg_lower or "subscription reports" in msg_lower:
                 fast_result = {"tool": "get_subscription_report", "arguments": {}, "customer_name": None}
-            elif "agent collection report" in msg_lower or "agent collection reports" in msg_lower:
+            elif "agent collection" in msg_lower or "collection" in msg_lower or "collected" in msg_lower:
                 fast_result = {"tool": "get_agent_collection_report", "arguments": {}, "customer_name": None}
             elif "expense summary" in msg_lower or "expense report" in msg_lower or "expense reports" in msg_lower or "total expenses" in msg_lower:
                 fast_result = {"tool": "get_expense_summary", "arguments": {}, "customer_name": None}
@@ -817,36 +889,37 @@ class BillerQAgent:
             temp_msg_no_app = msg_lower.replace("billerq", "")
             if "invoice" in msg_lower or "order" in msg_lower or "bill" in temp_msg_no_app:
                 fast_result = {"tool": "get_invoices", "arguments": {}, "customer_name": None}
+            # Always try LLM routing first to let the model do the cognitive work
+            router_system_prompt = ROUTER_SYSTEM_PROMPT_TEMPLATE.format(current_date=current_date)
+            
+            # Build prompt with history
+            router_messages = [
+                {"role": "system", "content": router_system_prompt}
+            ]
+            
+            if context and context.get("history"):
+                for turn in context["history"][-3:]:
+                    router_messages.append({"role": "user", "content": turn.get("user", "")})
+                    router_messages.append({"role": "assistant", "content": turn.get("assistant", "")})
+                    
+            router_messages.append({"role": "user", "content": message})
+            
+            logger.info("Routing query via LLM: '%s'", message[:100])
+            
+            try:
+                router_raw = await self.llm.chat(router_messages, temperature=0.1, num_predict=100)
+                logger.info("Router LLM response: %s", router_raw)
+                router_result = self._parse_router_response(router_raw)
+            except Exception as e:
+                logger.exception("Router call failed")
+                router_result = {"tool": "none", "arguments": {}, "customer_name": None}
 
-            if fast_result:
-                logger.info("Fast routed query (bypassed LLM): %s", fast_result)
-                router_result = fast_result
-            else:
-                router_system_prompt = ROUTER_SYSTEM_PROMPT_TEMPLATE.format(current_date=current_date)
-                
-                # Build prompt with history
-                router_messages = [
-                    {"role": "system", "content": router_system_prompt}
-                ]
-                
-                if context and context.get("history"):
-                    for turn in context["history"][-3:]:
-                        router_messages.append({"role": "user", "content": turn.get("user", "")})
-                        router_messages.append({"role": "assistant", "content": turn.get("assistant", "")})
-                        
-                router_messages.append({"role": "user", "content": message})
-                
-                logger.info("Routing query via LLM: '%s'", message[:100])
-                
-                # Call LLM to route
-                try:
-                    router_raw = await self.llm.chat(router_messages, temperature=0.1, num_predict=100)
-                    logger.info("Router LLM response: %s", router_raw)
-                    router_result = self._parse_router_response(router_raw)
-                except Exception as e:
-                    logger.exception("Router call failed")
-                    router_result = {"tool": "none", "arguments": {}, "customer_name": None}
-                
+            # Fallback to fast-routing rules only if LLM returned "none" and it's not a general company/founder query
+            if router_result.get("tool", "none") == "none" and fast_result:
+                is_general_query = any(k in msg_lower for k in ["founder", "who is", "who are", "why is", "what is", "how does", "hello", "hi", "hey"])
+                if not is_general_query:
+                    logger.info("LLM returned none, falling back to fast routed query: %s", fast_result)
+                    router_result = fast_result
             tool_name = router_result.get("tool", "none")
             tool_args = router_result.get("arguments", {})
             customer_name_query = router_result.get("customer_name")
@@ -1018,34 +1091,40 @@ class BillerQAgent:
 
             # If it is agent collection report, we resolve agent name to user_id
             if tool_name == "get_agent_collection_report" and customer_name_query:
-                try:
-                    users_resp = await self._execute_tool("get_user_select", {}, billerq_token, billerq_api_url, billerq_user_role)
-                    users_list = users_resp.get("data", []) if isinstance(users_resp, dict) else []
-                    
-                    matched_user = None
-                    agent_query = str(customer_name_query).lower().strip()
-                    agent_query = re.sub(r"\b(report|of|for|by|agent)\b", "", agent_query).strip()
-                    agent_query_norm = re.sub(r'\s+', '', agent_query)
-                    
-                    for u in users_list:
-                        u_name = str(u.get("user_name", "")).lower()
-                        u_name_norm = re.sub(r'\s+', '', u_name)
-                        if agent_query_norm == u_name_norm:
-                            matched_user = u
-                            break
-                    if not matched_user:
+                if any(w in str(customer_name_query).lower() for w in ["all", "each", "every", "according to", "agents"]):
+                    customer_name_query = None
+                    resolved_agent_name = None
+                    resolved_agent_id = None
+                else:
+                    try:
+                        users_resp = await self._execute_tool("get_user_select", {}, billerq_token, billerq_api_url, billerq_user_role)
+                        users_list = users_resp.get("data", []) if isinstance(users_resp, dict) else []
+                        
+                        matched_user = None
+                        agent_query = str(customer_name_query).lower().strip()
+                        agent_query = re.sub(r"\b(report|of|for|by|agent|tge|the|show|payment|collection)\b", "", agent_query).strip()
+                        agent_query = re.sub(r"\s+", " ", agent_query).strip()
+                        agent_query_norm = re.sub(r'\s+', '', agent_query)
+                        
                         for u in users_list:
                             u_name = str(u.get("user_name", "")).lower()
                             u_name_norm = re.sub(r'\s+', '', u_name)
-                            if agent_query_norm in u_name_norm or u_name_norm in agent_query_norm:
+                            if agent_query_norm == u_name_norm:
                                 matched_user = u
                                 break
-                    if matched_user:
-                        resolved_agent_id = matched_user.get("user_id")
-                        resolved_agent_name = matched_user.get("user_name")
-                        logger.info("Resolved agent name to user_id: %s (ID: %s)", resolved_agent_name, resolved_agent_id)
-                except Exception:
-                    logger.exception("Error resolving agent user_id")
+                        if not matched_user:
+                            for u in users_list:
+                                u_name = str(u.get("user_name", "")).lower()
+                                u_name_norm = re.sub(r'\s+', '', u_name)
+                                if agent_query_norm in u_name_norm or u_name_norm in agent_query_norm:
+                                    matched_user = u
+                                    break
+                        if matched_user:
+                            resolved_agent_id = matched_user.get("user_id")
+                            resolved_agent_name = matched_user.get("user_name")
+                            logger.info("Resolved agent name to user_id: %s (ID: %s)", resolved_agent_name, resolved_agent_id)
+                    except Exception:
+                        logger.exception("Error resolving agent user_id")
 
             # -------------------------------------------------------------
             # Step 3: Tool Execution
@@ -1130,7 +1209,12 @@ class BillerQAgent:
             # Speed optimization: bypass Formatter LLM for simple queries, metrics, errors or empty data
             rule_based_response = None
             if tool_name == "none":
-                rule_based_response = await self._get_fallback_dashboard_response(billerq_token, billerq_api_url, billerq_user_role)
+                is_json = "{" in router_raw and "}" in router_raw
+                if router_raw and not is_json and len(router_raw.strip()) > 5:
+                    metadata = self._get_redirect_metadata("none", resolved_cust_id, resolved_cust_name, message, resolved_agent_id=resolved_agent_id)
+                    return router_raw.strip(), metadata
+                if not message.strip():
+                    rule_based_response = await self._get_fallback_dashboard_response(billerq_token, billerq_api_url, billerq_user_role)
             elif tool_name == "show_guide":
                 category = tool_args.get("category", "billerq")
                 rule_based_response = self._get_guide_response(category)
@@ -1144,8 +1228,39 @@ class BillerQAgent:
 
                 # 1. get_customer_status_count
                 elif tool_name == "get_customer_status_count":
-                    status_f = "inactive" if "inactive" in msg_lower else "archived" if "archived" in msg_lower else "active"
-                    rule_based_response = await self._get_customer_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_f)
+                    if any(k in msg_lower for k in ["how many", "count", "number of", "total"]):
+                        # Extract counts from data
+                        c_data = tool_result.get("data") if isinstance(tool_result, dict) else []
+                        active_count = 0
+                        inactive_count = 0
+                        total_count = 0
+                        if isinstance(c_data, list):
+                            active_count = next((c.get("count") for c in c_data if c.get("status") == "Active"), 0)
+                            inactive_count = next((c.get("count") for c in c_data if c.get("status") == "Inactive"), 0)
+                            total_count = next((c.get("count") for c in c_data if c.get("status") == "Total"), 0)
+                        
+                        # Get archived count
+                        archived_count = 0
+                        try:
+                            archived_resp = await self._execute_tool("get_archived_customers", {}, billerq_token, billerq_api_url, billerq_user_role)
+                            archived_raw = archived_resp.get("data", []) if isinstance(archived_resp, dict) else []
+                            if isinstance(archived_raw, dict):
+                                archived_count = archived_raw.get("total", len(archived_raw.get("data", [])))
+                            elif isinstance(archived_raw, list):
+                                archived_count = len(archived_raw)
+                        except Exception:
+                            pass
+                            
+                        rule_based_response = (
+                            f"📊 **Customer Metrics & Counts Summary:**\n"
+                            f"• **Total Customers:** **{total_count:,}**\n"
+                            f"• **Active Customers:** **{active_count:,}** 🟢\n"
+                            f"• **Inactive Customers:** **{inactive_count:,}** 🔴\n"
+                            f"• **Archived Customers:** **{archived_count:,}** ⚠️"
+                        )
+                    else:
+                        status_f = "inactive" if "inactive" in msg_lower else "archived" if "archived" in msg_lower else "active"
+                        rule_based_response = await self._get_customer_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_f)
 
                 # 2. get_connection_data
                 elif tool_name == "get_connection_data":
@@ -1486,6 +1601,16 @@ class BillerQAgent:
                         pay = data.get("payment_collection", {})
                         cond = data.get("check_condition", {})
                         
+                        total_customers = cond.get('customers', 0)
+                        try:
+                            sc_resp = await self._execute_tool("get_customer_status_count", {}, billerq_token, billerq_api_url, billerq_user_role)
+                            sc_data = sc_resp.get("data", []) if isinstance(sc_resp, dict) else []
+                            for sc_item in sc_data:
+                                if sc_item.get("status") == "Total":
+                                    total_customers = sc_item.get("count", total_customers)
+                        except Exception:
+                            pass
+
                         msg_lower = message.lower()
                         if "this month" in msg_lower and "collection" in msg_lower:
                             rule_based_response = f"Total collection for this month: ₹{pay.get('this_month', '0.00')}"
@@ -1498,7 +1623,7 @@ class BillerQAgent:
                         else:
                             lines = [
                                 "📊 **Dashboard Overview:**",
-                                f"- **Total Customers:** {cond.get('customers', 0):,}",
+                                f"- **Total Customers:** {total_customers:,}",
                                 f"- **Active STBs:** {cond.get('stb', 0):,} 🟢",
                                 f"- **Active Packages:** {cond.get('packages', 0):,}",
                                 "",
@@ -1959,8 +2084,11 @@ class BillerQAgent:
                         # Normalize by removing all spaces so "archana u m" matches "archana um"
                         filter_norm = re.sub(r'\s+', '', filter_agent_lower)
                         for item in payments_list:
-                            item_agent = str(item.get("account_name", "")).lower()
-                            item_norm = re.sub(r'\s+', '', item_agent)
+                            item_agent = str(item.get("collected_by") or "").strip()
+                            if not item_agent:
+                                continue
+                            item_agent_lower = item_agent.lower()
+                            item_norm = re.sub(r'\s+', '', item_agent_lower)
                             if filter_norm in item_norm or item_norm in filter_norm:
                                 filtered_list.append(item)
                                 try:
@@ -1980,7 +2108,7 @@ class BillerQAgent:
                             rule_based_response = f"No collection logs found for agent **{filter_agent}** for {time_label}."
                         else:
                             lines = [
-                                f"👤 **Collection Details for Agent:** **{filtered_list[0].get('account_name')}** ({time_label})",
+                                f"👤 **Collection Details for Agent:** **{filtered_list[0].get('collected_by')}** ({time_label})",
                                 f"• Total Collection: **₹{self._format_curr(filtered_total)}**",
                                 "\n**Collection logs:**"
                             ]
@@ -1991,17 +2119,85 @@ class BillerQAgent:
                         if not payments_list:
                             rule_based_response = "No agent payments reported."
                         else:
-                            time_label = "this month"
+                            # Auto-detect target month and year from first payment if none is explicitly specified
+                            first_date = payments_list[0].get("paid_date") or ""
+                            parts = first_date.split("-")
+                            if len(parts) == 3:
+                                target_month = parts[1] # e.g. "June"
+                                target_year = parts[2]  # e.g. "2026"
+                            else:
+                                target_month = "June"
+                                target_year = "2026"
+
+                            # Parse time constraints from query
+                            time_label = f"{target_month} {target_year}"
+                            filter_year = None
+                            filter_month = None
+
                             if "last year" in msg_lower or "2025" in msg_lower:
-                                time_label = "last year (2025)"
+                                time_label = "2025"
+                                filter_year = "2025"
                             elif "this year" in msg_lower or "2026" in msg_lower:
-                                time_label = "this year (2026)"
+                                time_label = "2026"
+                                filter_year = "2026"
                             elif "2024" in msg_lower:
                                 time_label = "2024"
+                                filter_year = "2024"
+                            else:
+                                filter_month = target_month
+                                filter_year = target_year
+
+                            # Aggregate totals
+                            agent_totals = {}
+                            for p in payments_list:
+                                p_date = p.get("paid_date") or ""
+                                p_parts = p_date.split("-")
+                                if len(p_parts) == 3:
+                                    p_month = p_parts[1]
+                                    p_year = p_parts[2]
+                                else:
+                                    continue
                                 
-                            lines = [f"Total Agent Collection ({time_label}): **₹{self._format_curr(total_amount)}**", "\n**Recent Agent collection logs:**"]
+                                # Match year
+                                if filter_year and p_year != filter_year:
+                                    continue
+                                # Match month if specified
+                                if filter_month and p_month.lower() != filter_month.lower():
+                                    continue
+
+                                agent = str(p.get("collected_by") or "").strip()
+                                if not agent:
+                                    agent = "Other/Direct"
+                                try:
+                                    amt = float(str(p.get("collected_amount", 0.0)).replace(",", "").strip())
+                                except Exception:
+                                    amt = 0.0
+                                agent_totals[agent] = agent_totals.get(agent, 0.0) + amt
+
+                            # Sort agents by total collections descending
+                            sorted_agents = sorted(agent_totals.items(), key=lambda x: x[1], reverse=True)
+
+                            # Check if the query asks who has more / highest collections
+                            is_ranking_query = any(k in msg_lower for k in ["whose", "who", "highest", "most", "more", "rank", "top"])
+
+                            lines = []
+                            if is_ranking_query and sorted_agents:
+                                # Find the top actual agent (or just the top entity)
+                                top_agent, top_amt = sorted_agents[0]
+                                lines.append(f"🏆 The agent with the highest collection in **{time_label}** is **{top_agent}** with a total collection of **₹{self._format_curr(top_amt)}**.")
+                                lines.append(f"\nTotal Agent Collection ({time_label}): **₹{self._format_curr(total_amount)}**")
+                            else:
+                                lines.append(f"Total Agent Collection ({time_label}): **₹{self._format_curr(total_amount)}**")
+
+                            if sorted_agents:
+                                lines.append("\n**Collection Breakdown by Agent:**")
+                                for agent, amt in sorted_agents:
+                                    lines.append(f"• **{agent}**: **₹{self._format_curr(amt)}**")
+
+                            lines.append("\n**Recent Agent collection logs:**")
                             for item in payments_list[:5]:
-                                lines.append(f"• Invoice {item.get('invoice_no')}: **₹{item.get('collected_amount')}** from {item.get('customer_name')} ({item.get('account_name')})")
+                                lines.append(f"• Invoice {item.get('invoice_no')}: **₹{item.get('collected_amount')}** from {item.get('customer_name')} (Collected by: {item.get('collected_by') or 'N/A'}, Method: {item.get('account_name')})")
+
                             rule_based_response = "\n".join(lines)
 
                 # 26. get_expense_summary
@@ -2273,14 +2469,22 @@ class BillerQAgent:
                     if isinstance(c_data, dict):
                         items = c_data.get("data", [])
                         total = c_data.get("total", len(items))
+                    elif isinstance(c_data, list):
+                        items = c_data
+                        total = len(items)
                     if not items:
-                        rule_based_response = "No items found."
+                        rule_based_response = "No items found in the system."
                     else:
-                        lines = [f"Total Items: {total}", "Items List:"]
-                        for item in items[:5]:
-                            lines.append(f"• {item.get('name')} (Price: ₹{item.get('price', '0.00')}): {item.get('description', '')}")
-                        if total > 5:
-                            lines.append("\nFor the remaining, click the link below.")
+                        lines = [f"📦 **Total Items:** {total}\n", "**Items List:**"]
+                        for item in items[:10]:
+                            name = item.get('name', 'N/A')
+                            sku = item.get('sku', 'N/A')
+                            sale_price = item.get('sale_price', '0.00')
+                            category = item.get('category_name', 'N/A')
+                            status = (item.get('status') or 'N/A').upper()
+                            lines.append(f"• **{name}** — SKU: `{sku}` | Price: ₹{sale_price} | Category: {category} | Status: {status}")
+                        if total > 10:
+                            lines.append("\nFor the remaining items, click the link below.")
                         rule_based_response = "\n".join(lines)
 
                 # 44. get_staff
@@ -2416,31 +2620,7 @@ class BillerQAgent:
                             lines.append("\nFor the remaining, click the link below.")
                         rule_based_response = "\n".join(lines)
 
-                # 51. get_items
-                elif tool_name == "get_items":
-                    c_data = tool_result.get("data", {})
-                    items = []
-                    total = 0
-                    if isinstance(c_data, dict):
-                        items = c_data.get("data", [])
-                        total = c_data.get("total", len(items))
-                    elif isinstance(c_data, list):
-                        items = c_data
-                        total = len(items)
-                    if not items:
-                        rule_based_response = "No items found in the system."
-                    else:
-                        lines = [f"📦 **Total Items:** {total}\n", "**Items List:**"]
-                        for item in items[:10]:
-                            name = item.get('name', 'N/A')
-                            sku = item.get('sku', 'N/A')
-                            sale_price = item.get('sale_price', '0.00')
-                            category = item.get('category_name', 'N/A')
-                            status = (item.get('status') or 'N/A').upper()
-                            lines.append(f"• **{name}** — SKU: `{sku}` | Price: ₹{sale_price} | Category: {category} | Status: {status}")
-                        if total > 10:
-                            lines.append("\nFor the remaining items, click the link below.")
-                        rule_based_response = "\n".join(lines)
+
 
                 # 52. get_both_subscription_addon (custom computed)
                 elif tool_name == "get_both_subscription_addon":
@@ -2455,11 +2635,6 @@ class BillerQAgent:
                             sid = info.get('subscriber_id', 'N/A')
                             lines.append(f"• **{name}** (ID: `{sid}`)")
                         rule_based_response = "\n".join(lines)
-
-            if rule_based_response:
-                logger.info("Bypassing Formatter LLM — using rule-based response: '%s'", rule_based_response)
-                metadata = self._get_redirect_metadata(tool_name, resolved_cust_id, resolved_cust_name, message, resolved_agent_id=resolved_agent_id)
-                return rule_based_response, metadata
 
             formatter_system_prompt = FORMATTER_SYSTEM_PROMPT_TEMPLATE.format(current_date=current_date)
             
@@ -2479,6 +2654,8 @@ class BillerQAgent:
             )
             if resolved_cust_name:
                 formatter_user_prompt += f"Customer Name: {resolved_cust_name} (ID: {resolved_cust_id})\n"
+            if rule_based_response:
+                formatter_user_prompt += f"\nReference Template (use this as a base for data/formatting):\n{rule_based_response}\n"
             formatter_user_prompt += f"\nRaw API data:\n{data_str}"
             
             formatter_messages = [
@@ -2488,11 +2665,14 @@ class BillerQAgent:
             
             try:
                 logger.info("Formatting response via LLM...")
-                final_text = await self.llm.chat(formatter_messages, temperature=0.3, num_predict=200)
+                final_text = await self.llm.chat(formatter_messages, temperature=0.3, num_predict=400)
                 final_text = final_text.strip()
             except Exception as e:
                 logger.exception("Formatter call failed")
-                final_text = await self._get_fallback_dashboard_response(billerq_token, billerq_api_url, billerq_user_role)
+                if rule_based_response:
+                    final_text = rule_based_response
+                else:
+                    final_text = await self._get_fallback_dashboard_response(billerq_token, billerq_api_url, billerq_user_role)
 
             # Ensure that redirect button metadata matches the tool executed
             metadata = self._get_redirect_metadata(tool_name, resolved_cust_id, resolved_cust_name, message, resolved_agent_id=resolved_agent_id)
@@ -2910,6 +3090,16 @@ class BillerQAgent:
         pay = data.get("payment_collection", {}) if isinstance(data, dict) else {}
         cond = data.get("check_condition", {}) if isinstance(data, dict) else {}
 
+        total_customers = cond.get('customers', 0)
+        try:
+            sc_resp = await self._execute_tool("get_customer_status_count", {}, billerq_token, billerq_api_url, billerq_user_role)
+            sc_data = sc_resp.get("data", []) if isinstance(sc_resp, dict) else []
+            for sc_item in sc_data:
+                if sc_item.get("status") == "Total":
+                    total_customers = sc_item.get("count", total_customers)
+        except Exception:
+            pass
+
         lines = [
             "I couldn't understand that query. Please try typing a clear prompt, such as:",
             "• *\"Show active customers\"*",
@@ -2918,7 +3108,7 @@ class BillerQAgent:
             "• *\"Show all complaints\"*",
             "",
             "📊 **Dashboard Overview:**",
-            f"- **Total Customers:** {cond.get('customers', 0):,}",
+            f"- **Total Customers:** {total_customers:,}",
             f"- **Active STBs:** {cond.get('stb', 0):,} 🟢",
             f"- **Active Packages:** {cond.get('packages', 0):,}",
             "",

@@ -63,7 +63,7 @@ class Formatter:
     def __init__(self, llm):
         """
         Args:
-            llm: An instance of BaseLLM (OllamaProvider or BedrockProvider).
+            llm: An instance of BaseLLM (BedrockProvider).
         """
         self.llm = llm
 

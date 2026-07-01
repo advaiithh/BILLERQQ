@@ -25,7 +25,7 @@ from api.client import api_client
 from agent.agent_loop import BillerQAgent
 
 
-load_dotenv()
+load_dotenv(override=True)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -44,25 +44,11 @@ logger = logging.getLogger("billerq-ai")
 # LLM Provider Setup
 # ---------------------------------------------------------------------------
 def _create_llm():
-    """Create the LLM provider based on .env config."""
-    provider = os.getenv("LLM_PROVIDER", "ollama").lower()
+    """Create the AWS Bedrock LLM provider."""
+    from llm.bedrock_provider import BedrockProvider
 
-    if provider == "ollama":
-        from llm.ollama_provider import OllamaProvider
-
-        model = os.getenv("OLLAMA_MODEL", "qwen3")
-        host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-        logger.info("Using Ollama provider: model=%s, host=%s", model, host)
-        return OllamaProvider(model=model, host=host)
-
-    elif provider == "bedrock":
-        from llm.bedrock_provider import BedrockProvider
-
-        logger.info("Using Bedrock provider")
-        return BedrockProvider()
-
-    else:
-        raise ValueError(f"Unknown LLM_PROVIDER: {provider}. Use 'ollama' or 'bedrock'.")
+    logger.info("Using AWS Bedrock provider (Claude 3 Haiku)")
+    return BedrockProvider()
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +229,27 @@ async def chat(request: ChatRequest):
         if resolved_message != message:
             logger.info("Pronoun resolved: '%s' → '%s'", message, resolved_message)
 
+        # Prompt limit check per day (sliding 24-hour window)
+        import time
+        prompt_limit = int(os.getenv("PROMPT_LIMIT_PER_DAY", "0"))
+        if prompt_limit > 0:
+            if not hasattr(memory, "prompt_timestamps"):
+                memory.prompt_timestamps = []
+            now = time.time()
+            memory.prompt_timestamps = [t for t in memory.prompt_timestamps if now - t < 86400]
+            if len(memory.prompt_timestamps) >= prompt_limit:
+                response_text = f"You have reached your daily limit of {prompt_limit} prompts. Please try again later to save credits."
+                memory.add_turn(message, response_text)
+                return ChatResponse(
+                    response=response_text,
+                    session_id=session_id,
+                    metadata={
+                        "rate_limited": True,
+                        "llm_provider": "bedrock"
+                    }
+                )
+            memory.prompt_timestamps.append(now)
+
         # Check BillerQ authorization token
         if not request.billerq_token and not api_client.auto_login:
             response_text = (
@@ -265,6 +272,8 @@ async def chat(request: ChatRequest):
             billerq_api_url=request.billerq_api_url,
             billerq_user_role=request.billerq_user_role
         )
+
+        metadata["llm_provider"] = "bedrock"
 
         # Step 3: Update session memory with details resolved by agent
         if metadata.get("customer_id") and metadata.get("customer_name"):

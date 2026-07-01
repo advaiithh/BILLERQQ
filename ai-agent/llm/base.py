@@ -1,8 +1,5 @@
 """
 Abstract base class for LLM providers.
-
-Swap between Ollama (Qwen3) and AWS Bedrock (Claude Haiku)
-by changing the provider — no other code changes needed.
 """
 
 from abc import ABC, abstractmethod

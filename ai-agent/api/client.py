@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 
 from api.registry import get_endpoint
 
-load_dotenv()
+load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
