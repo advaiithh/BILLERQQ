@@ -268,14 +268,31 @@ async def chat(request: ChatRequest):
             )
 
         # Run the BillerQ Agent loop
-        context = memory.get_context()
-        response_text, metadata = await agent.run(
-            message=resolved_message,
-            context=context,
-            billerq_token=request.billerq_token,
-            billerq_api_url=request.billerq_api_url,
-            billerq_user_role=request.billerq_user_role
-        )
+        try:
+            context = memory.get_context()
+            response_text, metadata = await agent.run(
+                message=resolved_message,
+                context=context,
+                billerq_token=request.billerq_token,
+                billerq_api_url=request.billerq_api_url,
+                billerq_user_role=request.billerq_user_role
+            )
+        except Exception as e:
+            logger.exception("Agent run failed due to error")
+            response_text = f"I'm sorry, but I encountered an issue: {str(e)}"
+            metadata = {
+                "error": "llm_error",
+                "llm_provider": "bedrock"
+            }
+            if prompt_limit > 0:
+                metadata["prompt_limit"] = prompt_limit
+                metadata["remaining_prompts"] = remaining_prompts
+            memory.add_turn(message, response_text)
+            return ChatResponse(
+                response=response_text,
+                session_id=session_id,
+                metadata=metadata
+            )
 
         metadata["llm_provider"] = "bedrock"
         if prompt_limit > 0:

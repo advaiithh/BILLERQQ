@@ -912,6 +912,9 @@ class BillerQAgent:
                 router_result = self._parse_router_response(router_raw)
             except Exception as e:
                 logger.exception("Router call failed")
+                err_msg = str(e).lower()
+                if any(w in err_msg for w in ["signature", "credential", "aws", "bedrock", "invalid", "accesskey", "token"]):
+                    raise RuntimeError("AWS Bedrock connection failed. Please verify that your AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION in the .env file are correct and active.") from e
                 router_result = {"tool": "none", "arguments": {}, "customer_name": None}
 
             # Fallback to fast-routing rules only if LLM returned "none" and it's not a general company/founder query
@@ -2671,6 +2674,9 @@ class BillerQAgent:
                 final_text = final_text.strip()
             except Exception as e:
                 logger.exception("Formatter call failed")
+                err_msg = str(e).lower()
+                if any(w in err_msg for w in ["signature", "credential", "aws", "bedrock", "invalid", "accesskey", "token"]):
+                    raise RuntimeError("AWS Bedrock connection failed. Please verify that your AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION in the .env file are correct and active.") from e
                 if rule_based_response:
                     final_text = rule_based_response
                 else:
