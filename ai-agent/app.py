@@ -232,6 +232,7 @@ async def chat(request: ChatRequest):
         # Prompt limit check per day (sliding 24-hour window)
         import time
         prompt_limit = int(os.getenv("PROMPT_LIMIT_PER_DAY", "0"))
+        remaining_prompts = None
         if prompt_limit > 0:
             if not hasattr(memory, "prompt_timestamps"):
                 memory.prompt_timestamps = []
@@ -245,10 +246,13 @@ async def chat(request: ChatRequest):
                     session_id=session_id,
                     metadata={
                         "rate_limited": True,
-                        "llm_provider": "bedrock"
+                        "llm_provider": "bedrock",
+                        "prompt_limit": prompt_limit,
+                        "remaining_prompts": 0
                     }
                 )
             memory.prompt_timestamps.append(now)
+            remaining_prompts = max(0, prompt_limit - len(memory.prompt_timestamps))
 
         # Check BillerQ authorization token
         if not request.billerq_token and not api_client.auto_login:
@@ -274,6 +278,9 @@ async def chat(request: ChatRequest):
         )
 
         metadata["llm_provider"] = "bedrock"
+        if prompt_limit > 0:
+            metadata["prompt_limit"] = prompt_limit
+            metadata["remaining_prompts"] = remaining_prompts
 
         # Step 3: Update session memory with details resolved by agent
         if metadata.get("customer_id") and metadata.get("customer_name"):

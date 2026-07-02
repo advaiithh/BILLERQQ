@@ -2464,6 +2464,15 @@
 
                 if (data.response) {
                     appendMessage('bot', data.response, data.metadata);
+                    // Update remaining prompt count indicator in header if present
+                    if (data.metadata && typeof data.metadata.remaining_prompts !== 'undefined' && data.metadata.prompt_limit > 0) {
+                        const remaining = data.metadata.remaining_prompts;
+                        const suffix = remaining === 1 ? 'prompt left' : 'prompts left';
+                        const statusTextEl = document.querySelector('.chat-header-status');
+                        if (statusTextEl) {
+                            statusTextEl.innerHTML = `<span class="status-dot"></span>Online • ${remaining} ${suffix}`;
+                        }
+                    }
                     // Update session ID if server provides one
                     if (data.session_id) {
                         sessionId = data.session_id;
