@@ -2698,6 +2698,11 @@ class BillerQAgent:
             # Ensure that redirect button metadata matches the tool executed
             metadata = self._get_redirect_metadata(tool_name, resolved_cust_id, resolved_cust_name, message, resolved_agent_id=resolved_agent_id)
             
+            # Fetch and attach LLM token usage info to metadata
+            if hasattr(self.llm, "get_and_reset_usage"):
+                usage_info = self.llm.get_and_reset_usage()
+                metadata["token_usage"] = usage_info
+            
             return final_text, metadata
         finally:
             api_client._request_token_override = None

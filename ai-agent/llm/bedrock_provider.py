@@ -40,6 +40,8 @@ class BedrockProvider(BaseLLM):
             
         logger.info("Initializing BedrockProvider with model_id=%s, region=%s", self.model_id, self.region)
         self.client = boto3.client(**client_kwargs)
+        self.last_usage = {"input_tokens": 0, "output_tokens": 0}
+
 
     async def generate(
         self,
@@ -135,6 +137,15 @@ class BedrockProvider(BaseLLM):
             response = await loop.run_in_executor(None, _invoke)
             response_body = json.loads(response.get("body").read())
             
+            # Extract and update token usage metrics
+            usage = response_body.get("usage")
+            if usage:
+                input_t = usage.get("input_tokens", 0)
+                output_t = usage.get("output_tokens", 0)
+                logger.info(f"Bedrock Token Usage: Input: {input_t} tokens, Output: {output_t} tokens, Total: {input_t + output_t} tokens")
+                self.last_usage["input_tokens"] += input_t
+                self.last_usage["output_tokens"] += output_t
+            
             # Extract content from Claude response
             content_list = response_body.get("content", [])
             content = ""
@@ -187,3 +198,10 @@ class BedrockProvider(BaseLLM):
 
         logger.error("Failed to parse JSON from LLM response: %s", raw[:200])
         return {"error": "Failed to parse structured response", "raw": raw}
+
+    def get_and_reset_usage(self) -> dict:
+        """Retrieve and reset the token usage metrics from recent operations."""
+        usage = self.last_usage.copy()
+        self.last_usage = {"input_tokens": 0, "output_tokens": 0}
+        return usage
+
