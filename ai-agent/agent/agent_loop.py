@@ -892,40 +892,43 @@ class BillerQAgent:
             temp_msg_no_app = msg_lower.replace("billerq", "")
             if "invoice" in msg_lower or "order" in msg_lower or "bill" in temp_msg_no_app:
                 fast_result = {"tool": "get_invoices", "arguments": {}, "customer_name": None}
-            # Always try LLM routing first to let the model do the cognitive work
-            router_system_prompt = ROUTER_SYSTEM_PROMPT_TEMPLATE.format(current_date=current_date)
+            # Optimize token usage: bypass Router LLM if fast-routing rules match and it's not a general chit-chat query
+            is_general_query = any(k in msg_lower for k in ["founder", "who is", "who are", "why is", "what is", "how does", "hello", "hi", "hey"])
             
-            # Build prompt with history
-            router_messages = [
-                {"role": "system", "content": router_system_prompt}
-            ]
-            
-            if context and context.get("history"):
-                for turn in context["history"][-3:]:
-                    router_messages.append({"role": "user", "content": turn.get("user", "")})
-                    router_messages.append({"role": "assistant", "content": turn.get("assistant", "")})
-                    
-            router_messages.append({"role": "user", "content": message})
-            
-            logger.info("Routing query via LLM: '%s'", message[:100])
-            
-            try:
-                router_raw = await self.llm.chat(router_messages, temperature=0.1, num_predict=100)
-                logger.info("Router LLM response: %s", router_raw)
-                router_result = self._parse_router_response(router_raw)
-            except Exception as e:
-                logger.exception("Router call failed")
-                err_msg = str(e).lower()
-                if "throttle" in err_msg or "rate limit" in err_msg or "too many tokens" in err_msg:
-                    raise RuntimeError("AWS Bedrock rate limit exceeded (ThrottlingException): Too many tokens per day. Please check your AWS Bedrock quota limits.") from e
-                if any(w in err_msg for w in ["signature", "credential", "aws", "bedrock", "invalid", "accesskey"]):
-                    raise RuntimeError("AWS Bedrock connection failed. Please verify that your AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION in the .env file are correct and active.") from e
-                router_result = {"tool": "none", "arguments": {}, "customer_name": None}
+            if fast_result and not is_general_query:
+                logger.info("Bypassing Router LLM — using fast-routed query rule: %s", fast_result)
+                router_result = fast_result
+            else:
+                router_system_prompt = ROUTER_SYSTEM_PROMPT_TEMPLATE.format(current_date=current_date)
+                
+                # Build prompt with history
+                router_messages = [
+                    {"role": "system", "content": router_system_prompt}
+                ]
+                
+                if context and context.get("history"):
+                    for turn in context["history"][-3:]:
+                        router_messages.append({"role": "user", "content": turn.get("user", "")})
+                        router_messages.append({"role": "assistant", "content": turn.get("assistant", "")})
+                        
+                router_messages.append({"role": "user", "content": message})
+                
+                logger.info("Routing query via LLM: '%s'", message[:100])
+                
+                try:
+                    router_raw = await self.llm.chat(router_messages, temperature=0.1, num_predict=100)
+                    logger.info("Router LLM response: %s", router_raw)
+                    router_result = self._parse_router_response(router_raw)
+                except Exception as e:
+                    logger.exception("Router call failed")
+                    err_msg = str(e).lower()
+                    if "throttle" in err_msg or "rate limit" in err_msg or "too many tokens" in err_msg:
+                        raise RuntimeError("AWS Bedrock rate limit exceeded (ThrottlingException): Too many tokens per day. Please check your AWS Bedrock quota limits.") from e
+                    if any(w in err_msg for w in ["signature", "credential", "aws", "bedrock", "invalid", "accesskey"]):
+                        raise RuntimeError("AWS Bedrock connection failed. Please verify that your AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION in the .env file are correct and active.") from e
+                    router_result = {"tool": "none", "arguments": {}, "customer_name": None}
 
-            # Fallback to fast-routing rules only if LLM returned "none" and it's not a general company/founder query
-            if router_result.get("tool", "none") == "none" and fast_result:
-                is_general_query = any(k in msg_lower for k in ["founder", "who is", "who are", "why is", "what is", "how does", "hello", "hi", "hey"])
-                if not is_general_query:
+                if router_result.get("tool", "none") == "none" and fast_result:
                     logger.info("LLM returned none, falling back to fast routed query: %s", fast_result)
                     router_result = fast_result
             tool_name = router_result.get("tool", "none")
@@ -2670,25 +2673,26 @@ class BillerQAgent:
                 formatter_user_prompt += f"\nReference Template (use this as a base for data/formatting):\n{rule_based_response}\n"
             formatter_user_prompt += f"\nRaw API data:\n{data_str}"
             
-            formatter_messages = [
-                {"role": "system", "content": formatter_system_prompt},
-                {"role": "user", "content": formatter_user_prompt}
-            ]
-            
-            try:
-                logger.info("Formatting response via LLM...")
-                final_text = await self.llm.chat(formatter_messages, temperature=0.3, num_predict=400)
-                final_text = final_text.strip()
-            except Exception as e:
-                logger.exception("Formatter call failed")
-                err_msg = str(e).lower()
-                if "throttle" in err_msg or "rate limit" in err_msg or "too many tokens" in err_msg:
-                    raise RuntimeError("AWS Bedrock rate limit exceeded (ThrottlingException): Too many tokens per day. Please check your AWS Bedrock quota limits.") from e
-                if any(w in err_msg for w in ["signature", "credential", "aws", "bedrock", "invalid", "accesskey"]):
-                    raise RuntimeError("AWS Bedrock connection failed. Please verify that your AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION in the .env file are correct and active.") from e
-                if rule_based_response:
-                    final_text = rule_based_response
-                else:
+            if rule_based_response:
+                logger.info("Bypassing Formatter LLM — using rule-based response directly to save tokens.")
+                final_text = rule_based_response
+            else:
+                formatter_messages = [
+                    {"role": "system", "content": formatter_system_prompt},
+                    {"role": "user", "content": formatter_user_prompt}
+                ]
+                
+                try:
+                    logger.info("Formatting response via LLM...")
+                    final_text = await self.llm.chat(formatter_messages, temperature=0.3, num_predict=400)
+                    final_text = final_text.strip()
+                except Exception as e:
+                    logger.exception("Formatter call failed")
+                    err_msg = str(e).lower()
+                    if "throttle" in err_msg or "rate limit" in err_msg or "too many tokens" in err_msg:
+                        raise RuntimeError("AWS Bedrock rate limit exceeded (ThrottlingException): Too many tokens per day. Please check your AWS Bedrock quota limits.") from e
+                    if any(w in err_msg for w in ["signature", "credential", "aws", "bedrock", "invalid", "accesskey"]):
+                        raise RuntimeError("AWS Bedrock connection failed. Please verify that your AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION in the .env file are correct and active.") from e
                     final_text = await self._get_fallback_dashboard_response(billerq_token, billerq_api_url, billerq_user_role)
 
             # Ensure that redirect button metadata matches the tool executed
