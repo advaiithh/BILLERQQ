@@ -1600,6 +1600,29 @@
         const API_URL = window.BILLERQ_AI_URL || 'http://127.0.0.1:8080';
         let sessionId = localStorage.getItem('billerq_session_id') || generateId();
         localStorage.setItem('billerq_session_id', sessionId);
+
+        // Restore remaining prompt count if stored in localStorage
+        try {
+            const savedRemaining = localStorage.getItem('billerq_remaining_prompts');
+            const savedLimit = localStorage.getItem('billerq_prompt_limit');
+            if (savedRemaining !== null && savedLimit && parseInt(savedLimit) > 0) {
+                const remaining = parseInt(savedRemaining);
+                const suffix = remaining === 1 ? 'prompt left' : 'prompts left';
+                const updateUI = () => {
+                    const statusTextEl = document.querySelector('.chat-header-status');
+                    if (statusTextEl) {
+                        statusTextEl.innerHTML = `<span class="status-dot"></span>Online • ${remaining} ${suffix}`;
+                    }
+                };
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', updateUI);
+                } else {
+                    updateUI();
+                }
+            }
+        } catch (e) {
+            console.error('BillerQ AI: Failed to restore remaining prompts from localStorage', e);
+        }
         
         let parentToken = '';
         let parentApiUrl = '';
@@ -2467,6 +2490,9 @@
                     // Update remaining prompt count indicator in header if present
                     if (data.metadata && typeof data.metadata.remaining_prompts !== 'undefined' && data.metadata.prompt_limit > 0) {
                         const remaining = data.metadata.remaining_prompts;
+                        const limit = data.metadata.prompt_limit;
+                        localStorage.setItem('billerq_remaining_prompts', remaining);
+                        localStorage.setItem('billerq_prompt_limit', limit);
                         const suffix = remaining === 1 ? 'prompt left' : 'prompts left';
                         const statusTextEl = document.querySelector('.chat-header-status');
                         if (statusTextEl) {
