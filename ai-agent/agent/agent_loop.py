@@ -916,7 +916,9 @@ class BillerQAgent:
             except Exception as e:
                 logger.exception("Router call failed")
                 err_msg = str(e).lower()
-                if any(w in err_msg for w in ["signature", "credential", "aws", "bedrock", "invalid", "accesskey", "token"]):
+                if "throttle" in err_msg or "rate limit" in err_msg or "too many tokens" in err_msg:
+                    raise RuntimeError("AWS Bedrock rate limit exceeded (ThrottlingException): Too many tokens per day. Please check your AWS Bedrock quota limits.") from e
+                if any(w in err_msg for w in ["signature", "credential", "aws", "bedrock", "invalid", "accesskey"]):
                     raise RuntimeError("AWS Bedrock connection failed. Please verify that your AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION in the .env file are correct and active.") from e
                 router_result = {"tool": "none", "arguments": {}, "customer_name": None}
 
@@ -2680,7 +2682,9 @@ class BillerQAgent:
             except Exception as e:
                 logger.exception("Formatter call failed")
                 err_msg = str(e).lower()
-                if any(w in err_msg for w in ["signature", "credential", "aws", "bedrock", "invalid", "accesskey", "token"]):
+                if "throttle" in err_msg or "rate limit" in err_msg or "too many tokens" in err_msg:
+                    raise RuntimeError("AWS Bedrock rate limit exceeded (ThrottlingException): Too many tokens per day. Please check your AWS Bedrock quota limits.") from e
+                if any(w in err_msg for w in ["signature", "credential", "aws", "bedrock", "invalid", "accesskey"]):
                     raise RuntimeError("AWS Bedrock connection failed. Please verify that your AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION in the .env file are correct and active.") from e
                 if rule_based_response:
                     final_text = rule_based_response
