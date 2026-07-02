@@ -3,7 +3,7 @@ import logging
 import json
 import re
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Import BillerQ tools
 from tools.customer import (
@@ -516,12 +516,15 @@ class BillerQAgent:
             
             # 2. Last month collection / specific month collection
             month_match = None
-            if "collection" in msg_lower:
+            if "collection" in msg_lower or "income" in msg_lower:
                 if "last month" in msg_lower or "previous month" in msg_lower:
-                    month_match = "May"
+                    prev_month_date = datetime.now() - timedelta(days=28)
+                    month_match = prev_month_date.strftime("%b")
+                elif "this month" in msg_lower:
+                    month_match = datetime.now().strftime("%b")
                 else:
                     for m_name, m_abbr in months_map.items():
-                        if m_name in msg_lower:
+                        if f" {m_name} " in f" {msg_lower} " or f" {m_abbr} " in f" {msg_lower} ":
                             month_match = m_abbr
                             break
 
@@ -1848,7 +1851,9 @@ class BillerQAgent:
                 # 14. get_income_summary
                 elif tool_name == "get_income_summary":
                     data = tool_result.get("data", [])
-                    requested_month = tool_args.get("month", "May")
+                    requested_month = tool_args.get("month")
+                    if not requested_month:
+                        requested_month = datetime.now().strftime("%b")
                     if isinstance(data, list):
                         total = 0.0
                         row_details = []
