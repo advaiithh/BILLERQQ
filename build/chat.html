@@ -1595,9 +1595,9 @@
         // ============================================================
         // Configuration
         // ============================================================
-        // Default to the local backend started by start_dev.bat (port 8080).
+        // Default to the local backend started by start_dev.bat (port 8085).
         // If embedding in the parent app set `window.BILLERQ_AI_URL` to the host.
-        const API_URL = window.BILLERQ_AI_URL || 'http://127.0.0.1:8080';
+        const API_URL = window.BILLERQ_AI_URL || 'http://127.0.0.1:8085';
         let sessionId = localStorage.getItem('billerq_session_id') || generateId();
         localStorage.setItem('billerq_session_id', sessionId);
 

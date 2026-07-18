@@ -1,0 +1,14 @@
+{"timestamp": "2026-07-18T16:34:54.301165", "stage": "planner", "company_id": "customer", "user_id": "8253", "model": "claude-haiku", "input_tokens": 1167, "output_tokens": 33}
+{"timestamp": "2026-07-18T16:34:56.064868", "stage": "formatter", "company_id": "customer", "user_id": "8253", "model": "claude-haiku", "input_tokens": 34, "output_tokens": 71}
+{"timestamp": "2026-07-18T16:35:05.346278", "stage": "planner", "company_id": "customer", "user_id": "8253", "model": "claude-haiku", "input_tokens": 1246, "output_tokens": 100}
+{"timestamp": "2026-07-18T16:35:07.718579", "stage": "formatter", "company_id": "customer", "user_id": "8253", "model": "claude-haiku", "input_tokens": 36, "output_tokens": 119}
+{"timestamp": "2026-07-18T16:38:19.823543", "stage": "planner", "company_id": "customer", "user_id": "8253", "model": "claude-haiku", "input_tokens": 650, "output_tokens": 38}
+{"timestamp": "2026-07-18T16:55:20.719228", "stage": "planner", "company_id": "customer", "user_id": "8254", "model": "claude-haiku", "input_tokens": 951, "output_tokens": 37}
+{"timestamp": "2026-07-18T17:02:52.704557", "stage": "planner", "company_id": "customer", "user_id": "8255", "model": "claude-haiku", "input_tokens": 666, "output_tokens": 35}
+{"timestamp": "2026-07-18T17:03:33.556591", "stage": "planner", "company_id": "customer", "user_id": "8255", "model": "claude-haiku", "input_tokens": 1361, "output_tokens": 37}
+{"timestamp": "2026-07-18T17:03:57.772724", "stage": "planner", "company_id": "customer", "user_id": "8255", "model": "claude-haiku", "input_tokens": 1559, "output_tokens": 72}
+{"timestamp": "2026-07-18T17:06:58.460138", "stage": "planner", "company_id": "customer", "user_id": "8255", "model": "claude-haiku", "input_tokens": 1601, "output_tokens": 33}
+{"timestamp": "2026-07-18T17:07:02.138065", "stage": "formatter", "company_id": "customer", "user_id": "8255", "model": "claude-haiku", "input_tokens": 32, "output_tokens": 400}
+{"timestamp": "2026-07-18T17:07:18.856011", "stage": "planner", "company_id": "customer", "user_id": "8255", "model": "claude-haiku", "input_tokens": 1139, "output_tokens": 54}
+{"timestamp": "2026-07-18T17:08:10.009642", "stage": "planner", "company_id": "customer", "user_id": "8256", "model": "claude-haiku", "input_tokens": 702, "output_tokens": 54}
+{"timestamp": "2026-07-18T17:08:21.723004", "stage": "formatter", "company_id": "customer", "user_id": "8256", "model": "claude-haiku", "input_tokens": 32, "output_tokens": 400}

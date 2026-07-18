@@ -1,0 +1,12 @@
+# Ignore environment files
+ai-agent/.env
+
+# Ignore logs
+ai-agent/logs/
+ai-agent/debug_auth.log
+
+# Ignore pycache
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+*.pyc

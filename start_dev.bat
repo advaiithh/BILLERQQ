@@ -8,7 +8,7 @@ if exist "%~dp0.venv\Scripts\Activate.bat" (
 ) else (
     echo WARNING: virtualenv activation script not found at %~dp0.venv\Scripts\Activate.bat
 )
-start "BillerQ Backend" cmd /k "python -m uvicorn app:app --reload --host 127.0.0.1 --port 8080"
+start "BillerQ Backend" cmd /k "python -m uvicorn app:app --reload --host 127.0.0.1 --port 8085"
 popd
 
 :: Start frontend from build folder with SPA support

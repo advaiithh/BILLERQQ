@@ -231,15 +231,23 @@ async def chat(request: ChatRequest):
 
         # Prompt limit check per day (sliding 24-hour window)
         import time
+        from agent.rule_router import route_by_rules
+        
         prompt_limit = int(os.getenv("PROMPT_LIMIT_PER_DAY", "0"))
         remaining_prompts = None
+        
+        # Determine if query requires LLM (disabled rule router per user request)
+        will_use_llm = True
+        
         if prompt_limit > 0:
             if not hasattr(memory, "prompt_timestamps"):
                 memory.prompt_timestamps = []
             now = time.time()
+            # Prune old timestamps
             memory.prompt_timestamps = [t for t in memory.prompt_timestamps if now - t < 86400]
-            if len(memory.prompt_timestamps) >= prompt_limit:
-                response_text = f"You have reached your daily limit of {prompt_limit} prompts. Please try again later to save credits."
+            
+            if will_use_llm and len(memory.prompt_timestamps) >= prompt_limit:
+                response_text = "I can handle common BillerQ queries right now. Please try a more specific request such as 'show open complaints' or 'customer details for John'."
                 memory.add_turn(message, response_text)
                 return ChatResponse(
                     response=response_text,
@@ -251,7 +259,6 @@ async def chat(request: ChatRequest):
                         "remaining_prompts": 0
                     }
                 )
-            memory.prompt_timestamps.append(now)
             remaining_prompts = max(0, prompt_limit - len(memory.prompt_timestamps))
 
         # Check BillerQ authorization token
@@ -293,6 +300,17 @@ async def chat(request: ChatRequest):
                 session_id=session_id,
                 metadata=metadata
             )
+
+        # Record LLM call timestamp if Bedrock was actually invoked
+        used_llm_actual = False
+        if metadata and "token_usage" in metadata:
+            usage = metadata["token_usage"]
+            if usage and (usage.get("input_tokens", 0) > 0 or usage.get("output_tokens", 0) > 0):
+                used_llm_actual = True
+                
+        if used_llm_actual and prompt_limit > 0:
+            memory.prompt_timestamps.append(time.time())
+            remaining_prompts = max(0, prompt_limit - len(memory.prompt_timestamps))
 
         metadata["llm_provider"] = "bedrock"
         if prompt_limit > 0:
