@@ -220,5 +220,10 @@ LEARNED_ROUTES = {
         "tool": "get_packages",
         "arguments": {},
         "customer_name": None
+    },
+    "give packages list": {
+        "tool": "get_packages",
+        "arguments": {},
+        "customer_name": None
     }
 }

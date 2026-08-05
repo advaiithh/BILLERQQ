@@ -98,18 +98,18 @@ def _resolve_redirection_metadata(message: str, response_text: str = "", tool_na
     if any(k in combined for k in ["package", "packages", "pkg"]):
         if "report" in msg_lower or "summary" in msg_lower:
             return {"redirect_url": "/report/package-summary", "redirect_label": "View Package Report"}
-        return {"redirect_url": "/Services/package", "redirect_label": "View Packages"}
+        return {"redirect_url": "/services/packages", "redirect_label": "View Packages"}
 
     if any(k in combined for k in ["stb", "stbs", "set top box", "modem", "modems"]):
-        return {"redirect_url": "/customers/stb", "redirect_label": "View STBs"}
+        return {"redirect_url": "/customers/stb-modem", "redirect_label": "View STBs / Modems"}
 
     if any(k in combined for k in ["addon", "addons", "add-on", "add-ons"]):
         if "report" in msg_lower or "summary" in msg_lower:
             return {"redirect_url": "/report/addon-summary", "redirect_label": "View Addon Report"}
-        return {"redirect_url": "/Services/addon", "redirect_label": "View Addons"}
+        return {"redirect_url": "/services/addons", "redirect_label": "View Addons"}
 
     if any(k in combined for k in ["item", "items", "service item", "products"]):
-        return {"redirect_url": "/Services/item", "redirect_label": "View Items"}
+        return {"redirect_url": "/services/items", "redirect_label": "View Items"}
 
     if any(k in combined for k in ["archived customer", "deleted customer", "archived", "customer-archive"]):
         return {"redirect_url": "/customers/customer-archive", "redirect_label": "View Archived Customers"}
@@ -122,8 +122,11 @@ def _resolve_redirection_metadata(message: str, response_text: str = "", tool_na
     if any(k in combined for k in ["unpaid", "unpaid customer", "unpaid customers"]):
         return {"redirect_url": "/report/unpaid-customer", "redirect_label": "View Unpaid Customers"}
 
-    if any(k in combined for k in ["overdue", "payment due", "dues", "outstanding"]):
-        return {"redirect_url": "/report/payment-due", "redirect_label": "View Overdue Payments"}
+    if any(k in combined for k in ["overdue", "overdues"]):
+        return {"redirect_url": "/lead-manager/overdues", "redirect_label": "View Overdues"}
+
+    if any(k in combined for k in ["payment due", "dues", "outstanding"]):
+        return {"redirect_url": "/report/payment-due", "redirect_label": "View Payment Due Report"}
 
     if any(k in combined for k in ["collection", "collections", "collected", "payment collection"]):
         return {"redirect_url": "/report/payment-collection", "redirect_label": "View Payment Collections"}
@@ -143,6 +146,9 @@ def _resolve_redirection_metadata(message: str, response_text: str = "", tool_na
     if any(k in combined for k in ["invoice", "invoices", "bill", "bills", "order", "orders"]):
         return {"redirect_url": "/billing/invoice", "redirect_label": "View Invoices"}
 
+    if any(k in combined for k in ["activate subscription", "activate subscriptions"]):
+        return {"redirect_url": "/billing/activate-subscription", "redirect_label": "View Activate Subscription"}
+
     if any(k in combined for k in ["subscription", "subscriptions"]):
         if "report" in msg_lower or "summary" in msg_lower or "expired" in msg_lower:
             return {"redirect_url": "/report/subscription-summary", "redirect_label": "View Subscription Report"}
@@ -152,29 +158,29 @@ def _resolve_redirection_metadata(message: str, response_text: str = "", tool_na
         return {"redirect_url": "/complaints", "redirect_label": "View Complaints"}
 
     if any(k in combined for k in ["enquiry", "enquiries"]):
-        return {"redirect_url": "/lead-manage/enquiry", "redirect_label": "View Enquiries"}
+        return {"redirect_url": "/lead-manager/enquiry", "redirect_label": "View Enquiries"}
 
     if any(k in combined for k in ["lead", "leads"]):
-        return {"redirect_url": "/lead-manage/lead", "redirect_label": "View Leads"}
+        return {"redirect_url": "/lead-manager/leads", "redirect_label": "View Leads"}
 
     if any(k in combined for k in ["follow up", "follow ups", "followup", "followups"]):
-        return {"redirect_url": "/lead-manage/follow-up", "redirect_label": "View Follow-Ups"}
+        return {"redirect_url": "/lead-manager/follow-ups", "redirect_label": "View Follow-Ups"}
+
+    if any(k in combined for k in ["header", "expense header"]):
+        return {"redirect_url": "/expenses/header", "redirect_label": "View Headers"}
+
+    if any(k in combined for k in ["vendor", "vendors"]):
+        return {"redirect_url": "/expenses/vendor", "redirect_label": "View Vendors"}
 
     if any(k in combined for k in ["income", "incomes"]):
         if "report" in msg_lower or "summary" in msg_lower:
             return {"redirect_url": "/report/income-summary", "redirect_label": "View Income Summary"}
-        return {"redirect_url": "/expenses-income/income", "redirect_label": "View Income"}
+        return {"redirect_url": "/expenses/income", "redirect_label": "View Income"}
 
     if any(k in combined for k in ["expense", "expenses"]):
         if "report" in msg_lower or "summary" in msg_lower:
             return {"redirect_url": "/report/expense-summary", "redirect_label": "View Expense Summary"}
-        return {"redirect_url": "/expenses-income/expense", "redirect_label": "View Expenses"}
-
-    if any(k in combined for k in ["header", "expense header"]):
-        return {"redirect_url": "/expenses-income/header", "redirect_label": "View Headers"}
-
-    if any(k in combined for k in ["vendor", "vendors"]):
-        return {"redirect_url": "/expenses-income/vendor", "redirect_label": "View Vendors"}
+        return {"redirect_url": "/expenses/expenses", "redirect_label": "View Expenses"}
 
     if any(k in combined for k in ["account", "bank account", "banking"]):
         return {"redirect_url": "/banking/account", "redirect_label": "View Bank Accounts"}
@@ -182,11 +188,11 @@ def _resolve_redirection_metadata(message: str, response_text: str = "", tool_na
     if any(k in combined for k in ["transaction", "bank transaction"]):
         return {"redirect_url": "/banking/transaction", "redirect_label": "View Bank Transactions"}
 
-    if any(k in combined for k in ["staff", "employee", "employees"]):
-        return {"redirect_url": "/staff/staff", "redirect_label": "View Staff"}
+    if any(k in combined for k in ["staff", "employee", "employees", "user"]):
+        return {"redirect_url": "/menu/user", "redirect_label": "View Users / Staff"}
 
     if any(k in combined for k in ["role", "roles"]):
-        return {"redirect_url": "/staff/role", "redirect_label": "View Roles"}
+        return {"redirect_url": "/menu/role", "redirect_label": "View Roles"}
 
     if any(k in combined for k in ["area", "areas"]):
         return {"redirect_url": "/settings/area", "redirect_label": "View Areas"}
@@ -195,16 +201,21 @@ def _resolve_redirection_metadata(message: str, response_text: str = "", tool_na
         return {"redirect_url": "/settings/message-credit", "redirect_label": "View Message Credits"}
 
     if any(k in combined for k in ["sms log", "sms logs"]):
-        return {"redirect_url": "/report/sms-message-logs", "redirect_label": "View SMS Logs"}
+        return {"redirect_url": "/report/sms-logs", "redirect_label": "View SMS Logs"}
 
     if any(k in combined for k in ["whatsapp log", "whatsapp logs"]):
-        return {"redirect_url": "/report/whatsApp-message-logs", "redirect_label": "View WhatsApp Logs"}
+        return {"redirect_url": "/report/whatsapp-logs", "redirect_label": "View WhatsApp Logs"}
 
     if any(k in combined for k in ["category", "categories"]):
         return {"redirect_url": "/settings/categories", "redirect_label": "View Categories"}
 
-    if any(k in combined for k in ["tax class", "tax classes"]):
+    if any(k in combined for k in ["tax report", "tax reports", "tax class", "tax classes", "tax"]):
+        if "report" in msg_lower or "tax report" in msg_lower:
+            return {"redirect_url": "/report/tax-report", "redirect_label": "View Tax Report"}
         return {"redirect_url": "/settings/tax-class", "redirect_label": "View Tax Classes"}
+
+    if any(k in combined for k in ["payment method", "payment methods"]):
+        return {"redirect_url": "/settings/payment-method", "redirect_label": "View Payment Methods"}
 
     if any(k in combined for k in ["cas provider", "isp provider", "provider", "providers"]):
         return {"redirect_url": "/settings/cas-isp-provider", "redirect_label": "View Providers"}
