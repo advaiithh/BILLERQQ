@@ -1,27 +1,34 @@
 @echo off
 setlocal
 
-:: Start backend from ai-agent
-pushd %~dp0ai-agent
-if exist "%~dp0.venv\Scripts\Activate.bat" (
-    call "%~dp0.venv\Scripts\Activate.bat"
-) else (
-    echo WARNING: virtualenv activation script not found at %~dp0.venv\Scripts\Activate.bat
-)
-start "BillerQ Backend" cmd /k "python -m uvicorn app:app --reload --host 127.0.0.1 --port 8080"
-popd
+echo ============================================
+echo  Starting BillerQ AI Assistant
+echo ============================================
 
-:: Start frontend from build folder with SPA support
-cd /d %~dp0
+:: Start the AI backend from the ai-agent folder
+echo [1/2] Starting AI backend on port 8080...
+start "BillerQ AI Backend" cmd /k "cd /d %~dp0ai-agent && python -m uvicorn app:app --reload --host 127.0.0.1 --port 8080"
+
+:: Start the React frontend
+echo [2/2] Starting BillerQ frontend on port 3030...
 if exist "%~dp0build\index.html" (
-    start "BillerQ Frontend" cmd /k "python serve_frontend.py"
+    start "BillerQ Frontend" cmd /k "cd /d %~dp0 && python serve_frontend.py"
 ) else (
-    echo WARNING: build/index.html not found. Frontend server will not start.
+    echo WARNING: build/index.html not found. Frontend will not start.
 )
 
-:: Give the servers a moment, then open the frontend login page
-timeout /t 3 /nobreak >nul
+:: Give the servers time to boot, then open the browser
+echo Waiting for servers to boot...
+timeout /t 4 /nobreak >nul
 start "" "http://127.0.0.1:3030/signin"
+
+echo.
+echo ============================================
+echo  Servers started!
+echo  Frontend : http://127.0.0.1:3030
+echo  Backend  : http://127.0.0.1:8080
+echo  Widget   : http://127.0.0.1:8080/widget
+echo ============================================
 
 endlocal
 exit /b 0

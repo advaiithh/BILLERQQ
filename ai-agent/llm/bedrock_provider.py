@@ -1,5 +1,6 @@
 """
-AWS Bedrock LLM provider — connects to AWS Bedrock to run Claude 3 Haiku.
+AWS Bedrock LLM provider — connects to AWS Bedrock to run Claude 3 Haiku
+using the modern Converse API (boto3 client.converse()).
 """
 
 import os
@@ -8,6 +9,7 @@ import json
 import logging
 import asyncio
 import boto3
+from botocore.exceptions import ClientError
 
 from llm.base import BaseLLM
 
@@ -15,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class BedrockProvider(BaseLLM):
-    """LLM provider using AWS Bedrock with Claude Haiku."""
+    """LLM provider using AWS Bedrock with Claude 3 Haiku via the Converse API."""
 
     def __init__(
         self,
@@ -23,57 +25,60 @@ class BedrockProvider(BaseLLM):
         region: str | None = None,
     ):
         # Allow override from arguments or environment variables
-        self.model_id = model_id or os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0")
-        self.region = region or os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
-        
+        self.model_id = model_id or os.getenv(
+            "BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0"
+        )
+        self.region = (
+            region
+            or os.getenv("AWS_REGION")
+            or os.getenv("AWS_DEFAULT_REGION")
+            or "us-east-1"
+        )
+
         aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
         aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-        
-        # Create bedrock client
+
+        # Create bedrock-runtime client
         client_kwargs = {
             "service_name": "bedrock-runtime",
-            "region_name": self.region
+            "region_name": self.region,
         }
         if aws_access_key and aws_secret_key:
             client_kwargs["aws_access_key_id"] = aws_access_key
             client_kwargs["aws_secret_access_key"] = aws_secret_key
-            
-        logger.info("Initializing BedrockProvider with model_id=%s, region=%s", self.model_id, self.region)
+
+        logger.info(
+            "Initializing BedrockProvider (Converse API) with model_id=%s, region=%s",
+            self.model_id,
+            self.region,
+        )
         self.client = boto3.client(**client_kwargs)
         self.last_usage = {"input_tokens": 0, "output_tokens": 0}
 
+
+    # -----------------------------------------------------------------
+    # Public interface (matches BaseLLM + extended chat methods)
+    # -----------------------------------------------------------------
 
     async def generate(
         self,
         prompt: str,
         system: str = "",
         temperature: float = 0.3,
-        num_predict: int = 400,
+        num_predict: int = 2048,
     ) -> str:
-        """Generate a text response from the LLM.
-
-        Args:
-            prompt: The user/input prompt.
-            system: System-level instruction prompt.
-            temperature: Sampling temperature.
-            num_predict: Max tokens to predict/generate.
-
-        Returns:
-            The generated text response.
-        """
-        messages = [
-            {"role": "user", "content": prompt}
-        ]
-        return await self.chat(messages, temperature, num_predict, system)
+        """Generate a text response from a single user prompt."""
+        messages = [{"role": "user", "content": [{"text": prompt}]}]
+        return await self._converse(messages, system, temperature, num_predict)
 
     async def generate_json(
         self,
         prompt: str,
         system: str = "",
         temperature: float = 0.1,
-        num_predict: int = 400,
+        num_predict: int = 2048,
     ) -> dict:
-        """Generate a structured JSON response from the LLM."""
+        """Generate a structured JSON response from a single user prompt."""
         raw = await self.generate(prompt, system, temperature, num_predict)
         return self._parse_json(raw)
 
@@ -81,99 +86,131 @@ class BedrockProvider(BaseLLM):
         self,
         messages: list,
         temperature: float = 0.3,
-        num_predict: int = 400,
+        num_predict: int = 2048,
         system: str = "",
     ) -> str:
         """Generate a chat response using a list of messages.
 
         Args:
-            messages: List of message dictionaries, e.g. [{"role": "user", "content": "..."}]
+            messages: List of message dicts, e.g. [{"role": "user", "content": "..."}]
+                      Content can be a plain string or already in Converse format
+                      [{"text": "..."}].
             temperature: Sampling temperature.
-            num_predict: Maximum number of tokens to predict/generate.
-            system: Optional system prompt to override.
+            num_predict: Maximum number of tokens to generate.
+            system: Optional system prompt.
 
         Returns:
             The generated text response.
         """
-        # Separate system message if present
-        bedrock_messages = []
+        # Convert incoming messages to Converse API format
+        converse_messages = []
         extracted_system = system
 
         for msg in messages:
             role = msg.get("role")
             content = msg.get("content")
+
+            # Pull system messages out — Converse API takes them separately
             if role == "system":
                 if not extracted_system:
-                    extracted_system = content
+                    extracted_system = content if isinstance(content, str) else ""
+                continue
+
+            # Normalise content to Converse format: list of content blocks
+            if isinstance(content, str):
+                content_blocks = [{"text": content}]
+            elif isinstance(content, list):
+                content_blocks = content
             else:
-                # Standard Bedrock message structure
-                bedrock_messages.append({
-                    "role": role,
-                    "content": content
-                })
+                content_blocks = [{"text": str(content)}]
 
-        # Build payload
-        payload = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": num_predict,
-            "temperature": temperature,
-            "messages": bedrock_messages
-        }
-        if extracted_system:
-            payload["system"] = extracted_system
+            converse_messages.append({"role": role, "content": content_blocks})
 
-        try:
-            # invoke_model is a synchronous blocking call. Run in an executor to keep async loop responsive.
-            loop = asyncio.get_event_loop()
-            
-            def _invoke():
-                return self.client.invoke_model(
-                    body=json.dumps(payload),
-                    modelId=self.model_id,
-                    contentType="application/json",
-                    accept="application/json"
-                )
-                
-            response = await loop.run_in_executor(None, _invoke)
-            response_body = json.loads(response.get("body").read())
-            
-            # Extract and update token usage metrics
-            usage = response_body.get("usage")
-            if usage:
-                input_t = usage.get("input_tokens", 0)
-                output_t = usage.get("output_tokens", 0)
-                logger.info(f"Bedrock Token Usage: Input: {input_t} tokens, Output: {output_t} tokens, Total: {input_t + output_t} tokens")
-                self.last_usage["input_tokens"] += input_t
-                self.last_usage["output_tokens"] += output_t
-            
-            # Extract content from Claude response
-            content_list = response_body.get("content", [])
-            content = ""
-            if content_list and isinstance(content_list, list):
-                content = content_list[0].get("text", "")
-            elif isinstance(content_list, str):
-                content = content_list
-            return content.strip()
-
-        except Exception as e:
-            logger.error("Bedrock generation failed: %s", str(e))
-            raise RuntimeError(f"LLM generation failed: {str(e)}") from e
+        return await self._converse(
+            converse_messages, extracted_system, temperature, num_predict
+        )
 
     async def chat_json(
         self,
         messages: list,
         temperature: float = 0.1,
-        num_predict: int = 400,
+        num_predict: int = 2048,
         system: str = "",
     ) -> dict:
-        """Generate a structured JSON response from a chat session.
-
-        Extracts JSON from the response.
-        """
+        """Generate a structured JSON response from a chat session."""
         raw = await self.chat(messages, temperature, num_predict, system)
         return self._parse_json(raw)
 
+    # -----------------------------------------------------------------
+    # Core Converse API call
+    # -----------------------------------------------------------------
+
+    async def _converse(
+        self,
+        messages: list,
+        system: str = "",
+        temperature: float = 0.3,
+        max_tokens: int = 2048,
+    ) -> str:
+        """Call Bedrock Converse API and return the text response.
+
+        Args:
+            messages: Messages in Converse format
+                      [{"role": "user", "content": [{"text": "..."}]}]
+            system: System prompt string.
+            temperature: Sampling temperature (0.0–1.0).
+            max_tokens: Maximum tokens to generate.
+
+        Returns:
+            The model's text response.
+        """
+        # Build the Converse API request
+        request_kwargs = {
+            "modelId": self.model_id,
+            "messages": messages,
+            "inferenceConfig": {
+                "maxTokens": max_tokens,
+                "temperature": temperature,
+            },
+        }
+
+        if system:
+            request_kwargs["system"] = [{"text": system}]
+
+        try:
+            # converse() is a synchronous boto3 call; run in executor
+            loop = asyncio.get_event_loop()
+
+            def _invoke():
+                return self.client.converse(**request_kwargs)
+
+            response = await loop.run_in_executor(None, _invoke)
+
+            # Extract text from the response
+            output_message = response["output"]["message"]
+            content_blocks = output_message.get("content", [])
+
+            text_parts = []
+            for block in content_blocks:
+                if "text" in block:
+                    text_parts.append(block["text"])
+
+            return "\n".join(text_parts).strip()
+
+        except ClientError as e:
+            error_msg = e.response["Error"]["Message"]
+            logger.error("Bedrock Converse API error: %s", error_msg)
+            raise RuntimeError(f"Bedrock Converse API error: {error_msg}") from e
+        except Exception as e:
+            logger.error("Bedrock generation failed: %s", str(e))
+            raise RuntimeError(f"LLM generation failed: {str(e)}") from e
+
+    # -----------------------------------------------------------------
+    # JSON parsing helper
+    # -----------------------------------------------------------------
+
     def _parse_json(self, raw: str) -> dict:
+        """Extract a JSON object from the LLM's raw text response."""
         # Try direct parse first
         try:
             return json.loads(raw)

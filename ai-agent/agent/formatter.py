@@ -16,16 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Demo mode or simple response formatting should avoid an LLM call
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
-SIMPLE_FORMAT_INTENTS = {
-    "ACTIVE_CUSTOMERS",
-    "RECENT_PAYMENTS",
-    "UNPAID_CUSTOMERS",
-    "OVERDUE",
-    "COMPLAINTS",
-    "RECURRING",
-    "ANALYTICS",
-    "REPORT",
-}
+SIMPLE_FORMAT_INTENTS = set()
 
 # Load the formatter prompt template
 _PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "formatter_prompt.txt"

@@ -1,0 +1,17 @@
+# Environment variables
+.env
+*.env
+ai-agent/.env
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# IDE / Editor configs
+.vscode/
+.idea/
+
+# Scratch files
+ai-agent/scratch/

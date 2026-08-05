@@ -46,8 +46,7 @@ logger = logging.getLogger("billerq-ai")
 def _create_llm():
     """Create the AWS Bedrock LLM provider."""
     from llm.bedrock_provider import BedrockProvider
-
-    logger.info("Using AWS Bedrock provider (Claude 3 Haiku)")
+    logger.info("Using AWS Bedrock provider (Claude 3 Haiku / 4.5)")
     return BedrockProvider()
 
 
@@ -267,32 +266,66 @@ async def chat(request: ChatRequest):
                 metadata={"error": "login_required"},
             )
 
-        # Run the BillerQ Agent loop
+        # Resolve company_id from bearer token (JWT or Laravel Sanctum)
+        company_id = 1
+        if request.billerq_token:
+            try:
+                from auth_db import resolve_user_from_token
+                user_info = resolve_user_from_token(request.billerq_token)
+                if user_info:
+                    company_id = user_info.get("company_id", 1)
+                    logger.info("Resolved company_id=%d from token", company_id)
+            except Exception as auth_err:
+                logger.warning("Could not resolve company_id from token: %s", auth_err)
+
+        # ----------------------------------------------------------------
+        # PRIMARY PATH: DB Agent
+        # The DB agent handles ALL BillerQ questions — customer lookups,
+        # payment history, wallet comparisons, year-over-year analytics,
+        # anything. It uses get_schema + query_data to answer questions
+        # that were never anticipated at design time.
+        # ----------------------------------------------------------------
+        response_text = None
+        metadata = {}
+
         try:
-            context = memory.get_context()
-            response_text, metadata = await agent.run(
-                message=resolved_message,
-                context=context,
-                billerq_token=request.billerq_token,
-                billerq_api_url=request.billerq_api_url,
-                billerq_user_role=request.billerq_user_role
+            # Build conversation history for the DB agent
+            history = []
+            for turn in memory.get_context().get("history", []):
+                if turn.get("user"):
+                    history.append({"role": "user", "content": turn["user"]})
+                if turn.get("assistant"):
+                    history.append({"role": "assistant", "content": turn["assistant"]})
+            history.append({"role": "user", "content": resolved_message})
+
+            from agent.db_agent import run_agent as run_db_agent
+            logger.info("Routing to DB agent (primary)")
+            response_text, _ = run_db_agent(history, company_id=company_id)
+            metadata = {"agent_type": "db_agent", "company_id": company_id}
+
+        except Exception as db_err:
+            # ----------------------------------------------------------------
+            # FALLBACK: REST Agent
+            # Only reached when the database is completely unreachable
+            # (e.g. port-3306 firewall on a local machine).
+            # ----------------------------------------------------------------
+            logger.warning(
+                "DB agent unavailable (%s). Falling back to REST agent.", db_err
             )
-        except Exception as e:
-            logger.exception("Agent run failed due to error")
-            response_text = f"I'm sorry, but I encountered an issue: {str(e)}"
-            metadata = {
-                "error": "llm_error",
-                "llm_provider": "bedrock"
-            }
-            if prompt_limit > 0:
-                metadata["prompt_limit"] = prompt_limit
-                metadata["remaining_prompts"] = remaining_prompts
-            memory.add_turn(message, response_text)
-            return ChatResponse(
-                response=response_text,
-                session_id=session_id,
-                metadata=metadata
-            )
+            try:
+                context = memory.get_context()
+                response_text, metadata = await agent.run(
+                    message=resolved_message,
+                    context=context,
+                    billerq_token=request.billerq_token,
+                    billerq_api_url=request.billerq_api_url,
+                    billerq_user_role=request.billerq_user_role,
+                )
+                metadata["agent_type"] = "rest_agent"
+            except Exception as rest_err:
+                logger.exception("REST agent also failed")
+                response_text = "I'm having trouble reaching the data right now. Please try again in a moment."
+                metadata = {"agent_type": "error", "error": str(rest_err)}
 
         metadata["llm_provider"] = "bedrock"
         if prompt_limit > 0:

@@ -190,7 +190,7 @@ BillerQ Platform Info:
 10. `get_package_report` - To get package summary report/stats.
 11. `get_wallet_report` - To get wallet balance report/stats.
 12. `get_tax_report` - To get tax report/stats.
-13. `get_subscription_report` - To get subscription reports.
+13. `get_subscription_report` - To get subscription reports, expired subscription count, and expiring subscription stats.
 14. `get_addon_report` - To get customer add-on reports.
 15. `get_agent_collection_report` - To get collection details by agents. Can take optional "start_date" and "end_date" arguments (format DD-MM-YYYY).
 16. `get_income_summary` - To get monthly income summaries/details (do NOT use for daily/monthly collection metrics, use get_dashboard_data instead). Can take optional "month" (e.g. "May", "Jun") and "year" (e.g. "2026") arguments.
@@ -231,6 +231,7 @@ BillerQ Platform Info:
 51. `get_online_payments` - To get a list of online payments.
 52. `get_customer_payment_report` - To get a detailed customer payment report.
 53. `get_problem_types` - To get complaint categories/problem types.
+54. `get_archived_customers` - To get the list of archived/deleted customers.
 
 If no tool is needed (e.g. general greeting, chit-chat, simple question about the company or founders that doesn't need database access), select "none".
 
@@ -370,6 +371,7 @@ class BillerQAgent:
                 ("wallet", "wallets", "customer wallet", "customer wallets"): ("/customers/wallet", "Customers > Wallet"),
                 
                 # Billing
+                ("billing", "billing management"): ("/billing/subscription", "Billing Management"),
                 ("activate subscription", "activate subscriptions"): ("/billing/subscription", "Billing > Activate Subscription"),
                 ("subscription", "subscriptions"): ("/billing/subscription", "Billing > Subscription"),
                 ("cancelled invoice", "cancelled invoices", "canceled invoice", "canceled invoices"): ("/billing/cancelled-invoice", "Billing > Cancelled Invoice"),
@@ -388,6 +390,7 @@ class BillerQAgent:
                 ("vendor", "vendors"): ("/expenses-income/vendor", "Expenses & Income > Vendor"),
                 
                 # Banking
+                ("banking", "bank"): ("/banking/account", "Banking"),
                 ("account", "accounts", "bank account", "bank accounts"): ("/banking/account", "Banking > Account"),
                 ("transaction", "transactions", "bank transaction", "bank transactions"): ("/banking/transaction", "Banking > Transaction"),
                 
@@ -425,11 +428,24 @@ class BillerQAgent:
 
             is_navigation_request = any(kw in msg_lower for kw in ("redirect", "go to", "open", "navigate", "show page", "view page"))
             
+            # Keywords that represent tools, so they should not redirect on exact match unless it's a navigation request.
+            tool_keywords = {
+                "recurring", "recurring profiles", "recurring list",
+                "complaint", "complaints", "complaint list", "problems",
+                "lead", "leads", "enquiry", "enquiries",
+                "follow up", "follow ups", "follow-up", "followups",
+                "staff", "staffs", "role", "roles",
+                "account", "accounts", "bank account", "bank accounts",
+                "transaction", "transactions", "bank transaction", "bank transactions",
+                "expense", "expenses", "income", "incomes", "vendor", "vendors",
+                "sms logs", "sms log", "whatsapp logs", "whatsapp log"
+            }
+
             exact_match = None
             best_match_len = -1
             for keywords, (path, label) in navigation_mappings.items():
                 for kw in keywords:
-                    is_exact = msg_lower == kw
+                    is_exact = msg_lower == kw and kw not in tool_keywords
                     is_nav = is_navigation_request and bool(re.search(rf"\b{re.escape(kw)}\b", msg_lower))
                     if is_exact or is_nav:
                         if len(kw) > best_match_len:
@@ -856,7 +872,7 @@ class BillerQAgent:
                 fast_result = {"tool": "get_complaints", "arguments": {}, "customer_name": name_extracted}
             elif "recurring" in msg_lower:
                 fast_result = {"tool": "get_recurring_data", "arguments": {}, "customer_name": name_extracted}
-            elif "archived customer" in msg_lower or "archived customers" in msg_lower or "deleted customer" in msg_lower or "deleted customers" in msg_lower:
+            elif "archived" in msg_lower or "deleted" in msg_lower or "archive" in msg_lower:
                 fast_result = {"tool": "get_archived_customers", "arguments": {}, "customer_name": None}
             elif "pending subscription" in msg_lower or "pending subscriptions" in msg_lower or "pending activation" in msg_lower or "pending activations" in msg_lower:
                 fast_result = {"tool": "get_pending_subscriptions", "arguments": {}, "customer_name": None}
@@ -872,7 +888,7 @@ class BillerQAgent:
                 fast_result = {"tool": "get_tax_report", "arguments": {}, "customer_name": None}
             elif "addon report" in msg_lower or "addon reports" in msg_lower or "add-on report" in msg_lower or "add-on reports" in msg_lower:
                 fast_result = {"tool": "get_addon_report", "arguments": {}, "customer_name": None}
-            elif "subscription report" in msg_lower or "subscription reports" in msg_lower:
+            elif "subscription report" in msg_lower or "subscription reports" in msg_lower or "expired subscription" in msg_lower or "expired subscriptions" in msg_lower or "expired sub" in msg_lower or "how many expired" in msg_lower or "how mny expired" in msg_lower:
                 fast_result = {"tool": "get_subscription_report", "arguments": {}, "customer_name": None}
             elif "agent collection" in msg_lower or "collection" in msg_lower or "collected" in msg_lower:
                 fast_result = {"tool": "get_agent_collection_report", "arguments": {}, "customer_name": None}
@@ -889,15 +905,22 @@ class BillerQAgent:
             elif "show stb" in msg_lower or "show stbs" in msg_lower or "list stb" in msg_lower or "list stbs" in msg_lower or "view stb" in msg_lower or "view stbs" in msg_lower or "available stb" in msg_lower or "available stbs" in msg_lower or "set top box" in msg_lower or "set top boxes" in msg_lower:
                 fast_result = {"tool": "get_stbs", "arguments": {}, "customer_name": None}
             # Remove 'billerq' from text to avoid false positives matching 'bill'
-            temp_msg_no_app = msg_lower.replace("billerq", "")
-            if "invoice" in msg_lower or "order" in msg_lower or "bill" in temp_msg_no_app:
+            elif "invoice" in msg_lower or "order" in msg_lower or "bill" in msg_lower.replace("billerq", ""):
                 fast_result = {"tool": "get_invoices", "arguments": {}, "customer_name": None}
-            # Optimize token usage: bypass Router LLM if fast-routing rules match and it's not a general chit-chat query
-            is_general_query = any(k in msg_lower for k in ["founder", "who is", "who are", "why is", "what is", "how does", "hello", "hi", "hey"])
-            
-            if fast_result and not is_general_query:
-                logger.info("Bypassing Router LLM — using fast-routed query rule: %s", fast_result)
-                router_result = fast_result
+            # Check learned routes
+            learned_route = None
+            try:
+                import agent.learned_routes
+                import importlib
+                importlib.reload(agent.learned_routes)
+                if msg_lower in agent.learned_routes.LEARNED_ROUTES:
+                    learned_route = agent.learned_routes.LEARNED_ROUTES[msg_lower]
+                    logger.info("🎯 Cache Hit! Retrieved learned route for '%s': %s", msg_lower, learned_route)
+            except Exception:
+                pass
+
+            if learned_route:
+                router_result = learned_route
             else:
                 router_system_prompt = ROUTER_SYSTEM_PROMPT_TEMPLATE.format(current_date=current_date)
                 
@@ -919,6 +942,13 @@ class BillerQAgent:
                     router_raw = await self.llm.chat(router_messages, temperature=0.1, num_predict=100)
                     logger.info("Router LLM response: %s", router_raw)
                     router_result = self._parse_router_response(router_raw)
+                    # Learn successfully resolved route
+                    if router_result and router_result.get("tool", "none") != "none":
+                        try:
+                            from agent.route_manager import save_learned_route
+                            save_learned_route(message, router_result)
+                        except Exception:
+                            logger.exception("Failed to save learned route")
                 except Exception as e:
                     logger.exception("Router call failed")
                     err_msg = str(e).lower()
@@ -928,7 +958,10 @@ class BillerQAgent:
                         raise RuntimeError("AWS Bedrock connection failed. Please verify that your AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION in the .env file are correct and active.") from e
                     router_result = {"tool": "none", "arguments": {}, "customer_name": None}
 
-                if router_result.get("tool", "none") == "none" and fast_result:
+            # Fallback to fast-routing rules only if LLM returned "none" and it's not a general company/founder query
+            if router_result.get("tool", "none") == "none" and fast_result:
+                is_general_query = any(re.search(rf"\b{re.escape(k)}\b", msg_lower) for k in ["founder", "who is", "who are", "why is", "what is", "how does", "hello", "hi", "hey"])
+                if not is_general_query:
                     logger.info("LLM returned none, falling back to fast routed query: %s", fast_result)
                     router_result = fast_result
             tool_name = router_result.get("tool", "none")
@@ -1569,7 +1602,7 @@ class BillerQAgent:
                 # 6. get_complaint_status_count
                 elif tool_name == "get_complaint_status_count":
                     status_f = "open" if "open" in msg_lower else "in progress" if "progress" in msg_lower else "closed" if ("closed" in msg_lower or "resolved" in msg_lower) else None
-                    rule_based_response = await self._get_complaints_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_filter=status_f)
+                    rule_based_response = await self._get_complaints_dashboard_response(billerq_token, billerq_api_url, billerq_user_role, status_filter=status_f, skip_list=True)
 
                 # 7. get_complaints
                 elif tool_name == "get_complaints":
@@ -1631,6 +1664,8 @@ class BillerQAgent:
                             rule_based_response = f"Total outstanding dues: ₹{pay.get('dues', '0.00')}"
                         elif "wallet" in msg_lower:
                             rule_based_response = f"Total wallet balance: ₹{pay.get('wallet_amount', '0.00')}"
+                        elif "expired" in msg_lower:
+                            rule_based_response = f"🔴 **Total Expired Subscriptions:** **{subs.get('expired', 0):,}**"
                         else:
                             lines = [
                                 "📊 **Dashboard Overview:**",
@@ -2069,8 +2104,15 @@ class BillerQAgent:
                     subs_list = subs.get("data", []) if isinstance(subs, dict) else subs
                     expiring_data = rep_data.get("expiring", {})
                     expiring = expiring_data.get("expired", 0) if isinstance(expiring_data, dict) else expiring_data
-                    if not subs_list:
-                        rule_based_response = "No subscription report records found."
+                    if any(k in msg_lower for k in ["expired", "expire"]):
+                        lines = [f"🔴 **Total Expired Subscriptions:** **{expiring:,}**"]
+                        if subs_list:
+                            lines.append("\nRecent listings:")
+                            for item in subs_list[:5]:
+                                lines.append(f"• **{item.get('customer_name')}**: {item.get('package_name')} — Expires: {item.get('expire_date')}")
+                        rule_based_response = "\n".join(lines)
+                    elif not subs_list:
+                        rule_based_response = f"No subscription report records found. (Expired Subscriptions: {expiring})"
                     else:
                         lines = [f"Subscriptions Report (Expired: {expiring}):", "Recent listings:"]
                         for item in subs_list[:5]:
@@ -2983,12 +3025,24 @@ class BillerQAgent:
 
         return "\n".join(lines)
 
-    async def _get_complaints_dashboard_response(self, billerq_token, billerq_api_url, billerq_user_role, status_filter=None, customer_name_filter=None, problem_type_filter=None, area_filter=None):
+    async def _get_complaints_dashboard_response(self, billerq_token, billerq_api_url, billerq_user_role, status_filter=None, customer_name_filter=None, problem_type_filter=None, area_filter=None, skip_list=False):
         try:
             counts_resp = await self._execute_tool("get_complaint_status_count", {}, billerq_token, billerq_api_url, billerq_user_role)
             counts_data = counts_resp.get("data") if isinstance(counts_resp, dict) else []
         except Exception:
             counts_data = []
+
+        items = []
+        if not skip_list:
+            try:
+                complaints_resp = await self._execute_tool("get_complaints", {}, billerq_token, billerq_api_url, billerq_user_role)
+                complaints_wrapper = complaints_resp.get("data", {}) if isinstance(complaints_resp, dict) else {}
+                if isinstance(complaints_wrapper, dict):
+                    items = complaints_wrapper.get("data", [])
+                elif isinstance(complaints_wrapper, list):
+                    items = complaints_wrapper
+            except Exception:
+                items = []
         
         open_count = 0
         in_progress_count = 0
@@ -3009,17 +3063,6 @@ class BillerQAgent:
         
         if total_count == 0:
             total_count = open_count + in_progress_count + closed_count
-
-        try:
-            complaints_resp = await self._execute_tool("get_complaints", {}, billerq_token, billerq_api_url, billerq_user_role)
-            complaints_wrapper = complaints_resp.get("data", {}) if isinstance(complaints_resp, dict) else {}
-            items = []
-            if isinstance(complaints_wrapper, dict):
-                items = complaints_wrapper.get("data", [])
-            elif isinstance(complaints_wrapper, list):
-                items = complaints_wrapper
-        except Exception:
-            items = []
 
         # Local pre-filtering by customer, problem type, area
         if customer_name_filter:
