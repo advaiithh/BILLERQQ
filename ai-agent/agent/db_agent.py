@@ -95,8 +95,12 @@ POWERFUL TOOLS — use for ANYTHING the simple tools can't answer:
    FROM payments
    WHERE company_id = {company_id}
 
-7. Present money as ₹1,234.56. Present counts as plain numbers.
-   Keep answers conversational and direct — not a formal report.
+7. RESPONSE FORMATTING & AESTHETICS (STRICT REQUIREMENT):
+   - Always present responses in clean, beautiful, highly readable markdown.
+   - Use bold section headers with relevant emojis (e.g., 📦 Packages List, 📊 Overview, 💰 Financial Metrics, 👤 Customer Info, 🛠️ Complaints).
+   - Format list items with clean bullet points (•) on separate lines with bold field labels and values (e.g. • **Package Name** (Type): **₹Price** (Status)).
+   - Format money as ₹1,234.56 or ₹500 and numbers as comma-formatted integers (e.g., 102).
+   - Use generous spacing between items and sections so it's super easy to read at a glance.
 
 8. If the database returns no rows, say so clearly. Never invent data.
 """

@@ -367,7 +367,7 @@ class BillerQAgent:
                 # Customers
                 ("customer archive", "archived customer", "archived customers", "archive"): ("/customers/customer-archive", "Customers > Customer Archive"),
                 ("customer", "customers", "customer list"): ("/customers/customer", "Customers > Customer"),
-                ("stb", "modem", "stbs", "modems", "stb / modem"): ("/dashboard/default", "Customers > STB / Modem"),
+                ("stb", "modem", "stbs", "modems", "stb / modem"): ("/customers/stb", "Customers > STB / Modem"),
                 ("wallet", "wallets", "customer wallet", "customer wallets"): ("/customers/wallet", "Customers > Wallet"),
                 
                 # Billing
@@ -379,7 +379,7 @@ class BillerQAgent:
                 ("recurring", "recurring profiles", "recurring list"): ("/billing/recurring", "Billing > Recurring"),
                 
                 # Services / Products
-                ("package", "packages"): ("/dashboard/default", "Services / Products > Packages"),
+                ("package", "packages"): ("/Services/package", "Services / Products > Packages"),
                 ("addon", "addons"): ("/Services/addon", "Services / Products > Addons"),
                 ("item", "items"): ("/Services/item", "Services / Products > Items"),
                 
@@ -1968,11 +1968,17 @@ class BillerQAgent:
                     if not items:
                         rule_based_response = "No pending subscriptions found."
                     else:
-                        lines = [f"Total pending subscriptions: {total}", "Here are the recent pending subscriptions:"]
+                        lines = [
+                            f"⏳ **Pending Subscriptions Summary** (Total: **{total:,}**)\n",
+                            "Here are the recent pending activations:"
+                        ]
                         for item in items[:5]:
-                            lines.append(f"• **{item.get('customer_name')}** (Sub ID: **{item.get('subscriber_id')}**)\n  - **Plan:** {item.get('package_name')}\n  - **Order Status:** {item.get('order_status', '').upper()}")
-                        if total > 5:
-                            lines.append("\nFor the remaining, click the link below.")
+                            status = str(item.get('order_status') or 'PENDING').upper()
+                            lines.append(
+                                f"• **{item.get('customer_name')}** (Sub ID: `{item.get('subscriber_id')}`)\n"
+                                f"  - **Plan Package:** {item.get('package_name')}\n"
+                                f"  - **Order Status:** `{status}` 🟠"
+                            )
                         rule_based_response = "\n".join(lines)
 
                 # 18. get_online_payments
@@ -2302,9 +2308,18 @@ class BillerQAgent:
                     if not items:
                         rule_based_response = "No packages found in the system."
                     else:
-                        lines = [f"Total Packages: {total}", "Here are the first few packages:"]
+                        lines = [
+                            f"📦 **Available Packages Summary** (Total: **{total:,}**)\n",
+                            "Here are the top available package plans:"
+                        ]
                         for item in items[:5]:
-                            lines.append(f"• {item.get('name')} ({item.get('connection_type').upper()}): ₹{item.get('price')} ({item.get('status')})")
+                            status_str = str(item.get('status', 'active')).lower()
+                            icon = "🟢" if status_str == "active" else "🔴"
+                            conn = str(item.get('connection_type') or 'CABLE').upper()
+                            lines.append(
+                                f"• **{item.get('name')}** ({conn})\n"
+                                f"  - **Price:** ₹{item.get('price')} | **Status:** {item.get('status')} {icon}"
+                            )
                         rule_based_response = "\n".join(lines)
 
                 # 29. get_areas
@@ -2318,11 +2333,13 @@ class BillerQAgent:
                     if not items:
                         rule_based_response = "No areas found in the system."
                     else:
-                        lines = [f"Total Areas: {total}", "Available Areas list:"]
+                        lines = [
+                            f"📍 **Available Service Areas** (Total: **{total:,}**)\n",
+                            "Registered coverage areas:"
+                        ]
                         for item in items[:10]:
-                            lines.append(f"• {item.get('name')} (Code: {item.get('area_code', 'N/A')})")
-                        if total > 10:
-                            lines.append("\nFor the remaining, click the link below.")
+                            code = item.get('area_code') or 'N/A'
+                            lines.append(f"• **{item.get('name')}** (Area Code: `{code}`)")
                         rule_based_response = "\n".join(lines)
 
                 # 30. get_stb_status_count
@@ -2835,16 +2852,16 @@ class BillerQAgent:
             "get_complaints": ("/complaints", "View complaints"),
             "get_complaint_status_count": ("/complaints", "View complaints"),
             "get_invoices": ("/billing/invoice", "View invoices"),
-            "get_cancelled_invoices": ("/billing/invoice", "View invoices"),
-            "get_archived_customers": ("/customers/customer", "View customers"),
-            "get_pending_subscriptions": ("/customers/customer", "View customers"),
+            "get_cancelled_invoices": ("/billing/cancelled-invoice", "View Cancelled Invoices"),
+            "get_archived_customers": ("/customers/customer-archive", "View Archived Customers"),
+            "get_pending_subscriptions": ("/billing/subscription", "View Pending Subscriptions"),
             "get_online_payments": ("/report/online-payment", "View online payments"),
             "get_customer_payment_report": ("/report/customer-payment", "View payments"),
             "get_problem_types": ("/complaints", "View complaints"),
-            "get_packages": ("/dashboard/default", "Open analytics"),
-            "get_areas": ("/customers/customer", "View customers"),
-            "get_stb_status_count": ("/dashboard/default", "Open analytics"),
-            "get_stbs": ("/dashboard/default", "Open analytics"),
+            "get_packages": ("/Services/package", "View Packages"),
+            "get_areas": ("/settings/area", "View Areas"),
+            "get_stb_status_count": ("/customers/stb", "View STBs"),
+            "get_stbs": ("/customers/stb", "View STBs"),
             "get_enquiries": ("/lead-manage/enquiry", "View enquiries"),
             "get_leads": ("/lead-manage/lead", "View leads"),
             "get_followups": ("/lead-manage/follow-up", "View follow-ups"),

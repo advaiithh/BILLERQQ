@@ -200,5 +200,25 @@ LEARNED_ROUTES = {
         "tool": "get_enquiries",
         "arguments": {},
         "customer_name": None
+    },
+    "like can you get me the contact number of abhinand": {
+        "tool": "get_customer_profile",
+        "arguments": {},
+        "customer_name": "abhinand"
+    },
+    "give me the info about staffs": {
+        "tool": "get_staff",
+        "arguments": {},
+        "customer_name": None
+    },
+    "how much follow leads": {
+        "tool": "get_followups",
+        "arguments": {},
+        "customer_name": None
+    },
+    "give package list": {
+        "tool": "get_packages",
+        "arguments": {},
+        "customer_name": None
     }
 }
