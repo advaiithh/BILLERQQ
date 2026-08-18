@@ -1,194 +1,370 @@
-# BillerQ AI Assistant
+# BillerQ AI Assistant — Enterprise Multi-Tenant AI Agent & Operational Analytics Suite
 
-BillerQ AI Assistant is an intelligent, multi-agent query and analytics system designed for the BillerQ cable TV subscription management platform. It allows admins to interact with system statistics, customer profiles, payment logs, subscriptions, set-top boxes, and complaints using natural language.
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![AWS Bedrock](https://img.shields.io/badge/AWS%20Bedrock-Claude%203.5%20%2F%20Haiku-FF9900?style=flat-square&logo=amazon-aws)](https://aws.amazon.com/bedrock/)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python)](https://www.python.org/)
+[![Database](https://img.shields.io/badge/Database-Hostinger%20MySQL%20%2F%20REST-4479A1?style=flat-square&logo=mysql)](https://www.mysql.com/)
+[![License](https://img.shields.io/badge/License-Proprietary-red?style=flat-square)](#)
 
-The application utilizes a local Large Language Model (LLM) for intent planning and output formatting, while dynamically interfacing with live, tenant-specific BillerQ API endpoints.
+The **BillerQ AI Assistant** is an enterprise-grade, context-aware AI agent and conversational analytics platform engineered specifically for the **BillerQ Cable TV, Broadband, and Subscription Management Ecosystem**. 
 
----
-
-## Table of Contents
-1. [End-to-End Architecture](#1-end-to-end-architecture)
-2. [Directory and Code Breakdown](#2-directory-and-code-breakdown)
-   - [Core Agent Logic](#core-agent-logic)
-   - [API Integration layer](#api-integration-layer)
-   - [Natural Language Tools](#natural-language-tools)
-   - [UI Integration](#ui-integration)
-3. [API Fetching and Authentication Flow](#3-api-fetching-and-authentication-flow)
-   - [Dynamic Login & Tenant Redirection](#dynamic-login--tenant-redirection)
-   - [401 Token Refresh & Retries](#401-token-refresh--retries)
-   - [Frontend Token Passing & Decryption](#frontend-token-passing--decryption)
-4. [How Data Truncation and Resolution Were Fixed](#4-how-data-truncation-and-resolution-were-fixed)
-5. [Running Locally](#5-running-locally)
+Unlike naive Q&A chatbots, BillerQ AI Assistant operates as an **autonomous agentic orchestration pipeline**. It bridges natural language queries from administrators and support agents directly to live, multi-tenant BillerQ REST APIs and database layers—executing subscriber lookups, financial summaries, complaints tracking, package catalog lookups, and operational reporting in real-time.
 
 ---
 
-## 1. End-to-End Architecture
+## 📋 Table of Contents
 
-Every request sent by a user goes through a unified, six-step processing pipeline:
+1. [Executive Summary & Core Architecture](#-executive-summary--core-architecture)
+2. [End-to-End Processing Pipeline](#-end-to-end-processing-pipeline)
+3. [Architecture Diagrams](#-architecture-diagrams)
+4. [Key Capabilities & Feature Catalog](#-key-capabilities--feature-catalog)
+5. [Codebase & File Map Reference](#-codebase--file-map-reference)
+6. [Multi-Tenant Auth & Security Model](#-multi-tenant-auth--security-model)
+7. [Environment Configuration Reference](#-environment-configuration-reference)
+8. [Production Deployment & Frontend Integration](#-production-deployment--frontend-integration)
+9. [Local Development & Automated Testing](#-local-development--automated-testing)
+
+---
+
+## 🛡️ Executive Summary & Core Architecture
+
+In modern multi-tenant SaaS environments, operational users require fast access to metrics across thousands of subscriber accounts without navigating through deep nested dashboard pages. The BillerQ AI Assistant solves this by providing a unified natural language interface backed by:
+
+* **AWS Bedrock LLM Integration**: Powered by Anthropic Claude 3.5 / Haiku models for ultra-low latency intent parsing and structured response formatting.
+* **Stateful Session Memory**: Tracks user conversation turns and resolves pronouns (e.g., *"his balance"*, *"her active packages"*) back to previously referenced subscriber entities.
+* **Hybrid Fast Router**: Employs high-speed regex pattern matching to bypass LLM generation for standard dashboard metrics, ensuring sub-second response times.
+* **Cascading Resolver with Product Catalog Fallback**: Automatically cleans entity inputs, executes multi-attribute subscriber matching (Subscriber ID $\rightarrow$ Phone $\rightarrow$ Name), and falls back seamlessly to package/addon/item catalogs if no subscriber matches.
+* **Dynamic Multi-Tenancy & Zero Data Leakage**: Dynamically inherits user session tokens and company tenant endpoints (`https://<tenant>.billerq.com`), maintaining strict data isolation across clients.
+* **Pagination & Truncation Shielding**: Prunes bulky nested API payloads (e.g., stripping comment logs from complaint payloads) to keep LLM context limits intact while preserving global metrics like total database count.
+* **Actionable UI Deep Linking**: Generates context-aware React route metadata (`redirect_url`, `redirect_label`) to render dynamic one-click navigation buttons directly in the chat widget.
+
+---
+
+## ⚡ End-to-End Processing Pipeline
+
+Every message submitted to the BillerQ AI Assistant moves through a synchronous 6-stage lifecycle:
 
 ```
-[User Message] 
-       │
-       ▼
- 1. Memory Pronoun Resolution (Replaces "his", "her" with context names)
-       │
-       ▼
- 2. Intent & Entity Planner (Uses Ollama/Qwen LLM to extract JSON plan)
-       │
-       ▼
- 3. Search & Match Resolver (Resolves literal names or subscriber IDs to DB IDs)
-       │
-       ▼
- 4. Action Executor (Fires mapped BillerQ APIs and sanitizes data)
-       │
-       ▼
- 5. Conversational Formatter (Translates raw JSON into chat response via LLM)
-       │
-       ▼
-[Assistant Response]
+[ User Input (React UI / Chat Widget) ]
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────────┐
+│ 1. FastAPI Gateway & Daily Session Limiter              │
+│    - Evaluates session token & daily prompt allowance  │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│ 2. Session Memory & Pronoun Resolver                    │
+│    - Replaces possessive pronouns ("his", "her", "their")│
+│      with target subscriber entity from context history│
+└─────────────────────────┬───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│ 3. Hybrid Intent Router & Planner                       │
+│    - Fast Route: Matches regex rules for direct metric  │
+│    - Neural Route: AWS Bedrock extracts intent & args   │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│ 4. Cascading Entity & Catalog Resolver                  │
+│    - Resolves subscriber ID / Phone / Name             │
+│    - Fallback: Product catalog (Packages/Addons/Items) │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│ 5. Action Executor & Data Aggregator                    │
+│    - Dispatches scoped HTTP calls to BillerQ REST API   │
+│    - Optional DB agent fallback to Hostinger MySQL DB   │
+│    - Sanitizes & prunes nested JSON payload bloat       │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│ 6. Hybrid Formatter & UI Link Injector                  │
+│    - Formats markdown table/list with visual badges     │
+│    - Appends dynamic React navigation metadata         │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+                          ▼
+[ Formatted Response Payload + Interactive UI Shortcut ]
 ```
 
 ---
 
-## 2. Directory and Code Breakdown
+## 📐 Architecture Diagrams
 
-### Core Agent Logic
+### High-Level System Architecture
 
-#### 📂 [ai-agent/app.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/app.py)
-The main entry point of the FastAPI application.
-*   `_create_llm()`: Reads `.env` configuration and instantiates the chosen LLM provider (`OllamaProvider` or `BedrockProvider`).
-*   `lifespan(app)`: Managed context that handles startup configurations and shuts down the active HTTP client cleanly.
-*   `chat(request: ChatRequest)`: The core endpoint (`POST /chat`). Receives user queries and active session tokens, loads conversation memory, resolves pronouns, classifies intents, queries APIs via the executor, formats the response, updates history, and returns JSON output.
-*   `serve_widget()`: Serves `chat-widget/chat.html` static widget file.
+```mermaid
+graph TB
+    subgraph Client Layer
+        UI[BillerQ React / Blade Dashboard]
+        WIDGET[Iframe Chat Widget]
+    end
 
-#### 📂 [ai-agent/agent/planner.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/agent/planner.py)
-Classifies intents and extracts structured parameters from natural language.
-*   `Planner.plan(message, context)`: Sends the system prompts (`planner_prompt.txt`) and user context history to the LLM. Returns a structured JSON plan containing `intent`, `entities`, `uses_context`, and `confidence`.
-*   `Planner._build_prompt(message, context)`: Constructs the context payload, including the last referenced customer and the last 3-5 conversation turns.
-*   `Planner._validate_plan(plan, original_message)`: Ensures the LLM outputs contain valid keys/values and fallbacks to `UNKNOWN` in case of JSON parse failures.
+    subgraph AI Agent Gateway [FastAPI Backend]
+        APP[app.py Engine]
+        LIMIT[Rate Limiter & Auth Security]
+        MEM[Conversation Memory Manager]
+        ROUTER[Hybrid Intent Planner]
+        RESOLV[Cascading Entity Resolver]
+        EXEC[Action Tool Executor]
+        FORMAT[Response Formatter Engine]
+    end
 
-#### 📂 [ai-agent/agent/resolver.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/agent/resolver.py)
-Resolves literal customer references to primary keys (`customer_id`).
-*   `Resolver.resolve_customer(name)`: Sanitizes the search name by stripping common conversational prefixes (e.g., `"subscriber "`, `"customer "`, `"id "`). Queries BillerQ via `search_customer(cleaned_name)` and attempts to match.
-*   `Resolver._find_best_match(customers, name)`: Cascading matching checks (Exact Subscriber ID match $\rightarrow$ Exact Mobile match $\rightarrow$ Exact Name match $\rightarrow$ Prefix match $\rightarrow$ Substring match) to resolve a unique customer.
-*   `Resolver.resolve_customers(names)`: Parallel gather-execution of resolver calls for multi-customer comparisons.
+    subgraph Intelligence Engine
+        BEDROCK[AWS Bedrock - Claude Haiku / 3.5]
+    end
 
-#### 📂 [ai-agent/agent/executor.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/agent/executor.py)
-Translates resolved intents into tool API calls.
-*   `Executor.execute(plan, memory, billerq_token)`: Sets the request-level Bearer token override on the client and runs customer resolution if required.
-*   `Executor._resolve_customer_from_plan(entities, uses_context, memory, intent)`: Checks plan details, uses mobile/names directly, fallbacks to session memory if `uses_context` is true, or bypasses name requirement for generic listing requests (like `"show customer names"`).
-*   `Executor._route(intent, entities, customer_id)`: Routes the intent to the respective tool module functions. Minimizes complaints payload logs to fit within model context windows.
+    subgraph Data Sources
+        LARAVEL[BillerQ Core Laravel REST API]
+        MYSQL[Hostinger MySQL System Database]
+    end
 
-#### 📂 [ai-agent/agent/formatter.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/agent/formatter.py)
-Formats the raw API JSON data back into clear conversational text.
-*   `Formatter.format_response(intent, data, original_message, customer_name)`: Formats simple cases via templates or forwards complex structures to the LLM.
-*   `Formatter._llm_format()`: Prepares user prompt details, runs list truncation, dumps formatted JSON to string, and queries the LLM with formatting prompts (`formatter_prompt.txt`).
-*   `sanitize_and_truncate_data(data, max_list_len)`: Recursively traverses nested lists and caps their lengths to prevent token limit truncation.
-
-#### 📂 [ai-agent/agent/memory.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/agent/memory.py)
-Manages conversational session history.
-*   `ConversationMemory.resolve_pronoun(text)`: Scans the user prompt for pronouns (e.g., *"his details"*, *"her subscription"*) and replaces them with the stored `last_customer_name` string.
-*   `MemoryManager.get_session(session_id)`: Returns or instantiates a session tracker. Periodically garbage-collects expired sessions (30-minute inactivity limit).
-
----
-
-### API Integration Layer
-
-#### 📂 [ai-agent/api/client.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/api/client.py)
-The unified async HTTP connection layer.
-*   `BillerQClient._ensure_token()`: Triggers authentication lookup on startup.
-*   `BillerQClient._login()`: Logs in dynamically with credentials. Sets `self._token` and redirects `self.base_url` to the company URL returned in the login payload.
-*   `BillerQClient._request_with_retry(method, endpoint, params, json_data, override_token)`: Manages connection pools, attaches headers, captures HTTP status errors, triggers automatic logins on `401 Unauthorized`, and performs exponential backoff retries.
-*   `BillerQClient.get()`, `post()`: Route endpoints through registry keys.
-
-#### 📂 [ai-agent/api/registry.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/api/registry.py)
-*   `API_REGISTRY`: Logical key-to-endpoint mapping. Contains all mapped backend read endpoints of BillerQ (e.g. `/admin/get-customer-profile`, `/admin/get-complaint`).
-*   `get_endpoint(registry_key)`: Looks up and sanitizes relative route routes.
+    UI -->|Embeds & Events| WIDGET
+    WIDGET -->|POST /chat with Bearer Token| APP
+    APP --> LIMIT
+    LIMIT --> MEM
+    MEM --> ROUTER
+    ROUTER -->|Intent & Parsing| BEDROCK
+    ROUTER --> RESOLV
+    RESOLV -->|Tenant API Search| LARAVEL
+    RESOLV --> EXEC
+    EXEC -->|Rest Tool Queries| LARAVEL
+    EXEC -->|DB Direct Fallback| MYSQL
+    EXEC --> FORMAT
+    FORMAT -->|Response Formatting| BEDROCK
+    FORMAT -->|JSON Response + Redirect Links| WIDGET
+```
 
 ---
 
-### Natural Language Tools
+## 🚀 Key Capabilities & Feature Catalog
 
-#### 📂 [ai-agent/tools/customer.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/tools/customer.py)
-*   `search_customer(query)`: Queries `/admin/get-customer-search`.
-*   `get_customer_profile(customer_id)`: Queries `/admin/get-customer-profile`.
-*   `get_all_customers(page)`: Queries paginated customers `/admin/show-customer`.
-*   `get_customer_status_count()`: Queries status counts `/admin/get-customer-status-wise-count`.
-*   `get_customer_stb(customer_id)`: Queries assigned set-top boxes `/admin/get-single-customer-stb`.
+The system provides complete operational coverage across 11 key functional domains:
 
-#### 📂 [ai-agent/tools/complaints.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/tools/complaints.py)
-*   `get_complaints()`: Queries `/admin/get-complaint`.
-*   `get_complaint_status_count()`: Queries `/admin/complaint-status-count`.
-
-#### 📂 [ai-agent/tools/payment.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/tools/payment.py)
-*   `get_payment_history(customer_id)`: Queries `/admin/get-customer-payment-history`.
-*   `get_recent_payments()`: Queries `/admin/get-recent-payment`.
-*   `get_unpaid_customers()`: Queries `/admin/get-unpaid-customers`.
-*   `get_overdues()`: Queries `/admin/overdues`.
-
----
-
-### UI Integration
-
-#### 📂 [ai-agent/chat-widget/chat.html](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/chat-widget/chat.html)
-The floating chat widget. It runs inside an iframe and listens for the parent's auth token or decrypts the logged-in user profile from `localStorage` using CryptoJS. It communicates with the FastAPI endpoint `/chat` and posts toggles back to the parent.
-
-#### 📂 [build/index.html](file:///C:/Users/Lenovo/Desktop/Chatbot/build/index.html)
-The main BillerQ React web application layout template. It hosts the chat assistant iframe container and adjusts width/height layouts dynamically.
+| Category | Tools & Capabilities | Key Endpoints / Actions |
+| :--- | :--- | :--- |
+| **Subscriber Management** | Customer search, full profiles, STB/Modem assignments, wallet balances, archived records. | `search_customer`, `get_customer_profile`, `get_customer_stb`, `get_unpaid_customers` |
+| **Complaints & Support** | Ticket status summaries, active complaint lists, issue categorization, priority tracking. | `get_complaints`, `get_complaint_status_count` |
+| **Financials & Billing** | Payment collection history, recent transactions, overdue accounts, unpaid bills, recurring profiles. | `get_payment_history`, `get_recent_payments`, `get_overdues`, `get_cancelled_invoices` |
+| **Service Catalog** | Package listings, add-on options, product items, pricing & tax breakdowns. | `get_packages`, `get_all_addons`, `get_items` |
+| **Agent Collections** | Field agent collection reports, leaderboards, revenue totals, method breakdowns. | `get_agent_collection_report`, `get_tax_report` |
+| **Banking & Accounts** | Bank account listings, deposit tracking, transaction logs. | `get_bank_accounts`, `get_bank_transactions` |
+| **Expenses & Income** | Vendor expenses, header summaries, income logs, company ledger metrics. | `get_expenses`, `get_income`, `get_vendors`, `get_expense_headers` |
+| **Lead Management** | Customer enquiries, lead conversion logs, pending follow-ups. | `get_enquiries`, `get_leads`, `get_followups` |
+| **Staff & RBAC** | System user lists, staff roles, permission lookups. | `get_staff`, `get_roles` |
+| **System Settings** | Service areas, ISP provider lists, credit settings. | `get_areas`, `get_providers` |
+| **Communication Logs** | SMS dispatch logs, WhatsApp message usage, credit balances. | `get_sms_logs`, `get_whatsapp_logs` |
 
 ---
 
-## 3. API Fetching and Authentication Flow
+## 📁 Codebase & File Map Reference
 
-The backend handles authentication dynamically so that admins do not need to manually configure keys:
+The complete system repository layout and component responsibilities:
 
-### Dynamic Login & Tenant Redirection
-BillerQ hosts customer data on company-specific tenant URLs (e.g., `https://customer.billerq.com`).
-1.  On first request, the client posts to the main login endpoint `https://admin.billerq.com/public/api/login`.
-2.  The response includes the company profile URL (e.g., `"url": "https://company-tenant.billerq.com"`).
-3.  The client updates `self.base_url` to this company-tenant URL.
-4.  All subsequent queries are routed directly to the tenant endpoint.
-
-### 401 Token Refresh & Retries
-1.  If a request fails with an HTTP `401 Unauthorized` status (meaning the bearer token expired), the client intercepts it.
-2.  It invalidates `self._token`, acquires a login lock, fires `_login()`, and fetches a fresh token.
-3.  It retries the failed request once before reporting any error.
-
-### Frontend Token Passing & Decryption
-To avoid admin logins inside the widget, the widget extracts the session token from the parent app:
-1.  When the user log in on BillerQ, the React app encrypts the credentials and stores them in `localStorage.getItem("login")` using the key `6Lf2jgMqAAAAACyRDVxBwemO3J5uxCMKyvzIvNbV`.
-2.  `chat.html` decrypts this string using CryptoJS:
-    ```javascript
-    const decrypted = CryptoJS.AES.decrypt(loginStr, '6Lf2jgMqAAAAACyRDVxBwemO3J5uxCMKyvzIvNbV').toString(CryptoJS.enc.Utf8);
-    const loginData = JSON.parse(decrypted);
-    const userToken = loginData.userToken;
-    ```
-3.  The token is sent in the body of `/chat` calls and overrides the backend client headers: `Authorization: Bearer <userToken>`.
+```
+BILLERQQ/
+├── README.md                                    # Primary Root Documentation
+├── CHATBOT_ARCHITECTURE_AND_WORKING.md          # Comprehensive Architecture Manual
+├── serve_frontend.py                             # Development Static Web Server
+├── start_dev.bat                                # Windows Batch Launcher
+├── build/                                       # Production React Frontend Build Directory
+└── ai-agent/                                    # AI Agent Core Engine Directory
+    ├── app.py                                   # FastAPI Web Server, CORS & Lifespan Router
+    ├── config.py                                # System Environment & Global Configurations
+    ├── database.py                              # Hostinger MySQL Connection & Session Pool
+    ├── auth_db.py                               # DB Authentication & Session Handler
+    ├── tools_db.py                              # Direct MySQL Database Query Tools
+    ├── schema_docs.py                           # MySQL Database Schema Specifications
+    ├── requirements.txt                         # Python Dependencies List
+    ├── .env                                     # Environment Variables & API Credentials
+    ├── agent/                                   # Core Orchestrator & Reasoning Layer
+    │   ├── agent_loop.py                        # E2E Agent Runner & Orchestration Pipeline
+    │   ├── planner.py                           # Intent Classification & Arg Extractor
+    │   ├── resolver.py                          # Entity Matcher & Product Catalog Fallback
+    │   ├── executor.py                          # Tool Dispatcher & Payload Sanitizer
+    │   ├── formatter.py                         # LLM & Template Response Builder
+    │   ├── memory.py                            # Session Tracker & Pronoun Resolver
+    │   ├── analyzer.py                          # Data Aggregator & Payload Capping Shield
+    │   ├── reasoner.py                          # Complex Multi-Step Reasoning Engine
+    │   ├── query_processor.py                   # Natural Language Query Normalizer
+    │   ├── analytics.py                         # Revenue & Metrics Calculation Engine
+    │   └── route_manager.py                     # Dynamic UI Route Metadata Resolver
+    ├── api/                                     # HTTP Networking & REST Integration Layer
+    │   ├── client.py                            # Async HTTP Client with Auto-Login & 401 Retries
+    │   └── registry.py                          # BillerQ API Route & Endpoint Registry
+    ├── llm/                                     # LLM Provider Drivers
+    │   ├── base.py                              # Base LLM Interface Definition
+    │   ├── bedrock_provider.py                  # AWS Bedrock Claude 3.5 / Haiku Integration
+    │   └── groq_provider.py                     # Groq LLM Driver Integration
+    ├── tools/                                   # Domain API Tool Modules
+    │   ├── customer.py                          # Subscriber Lookups & STB Tools
+    │   ├── payment.py                           # Invoices, Overdues & Transaction Tools
+    │   ├── subscription.py                      # Package, Addon & Catalog Tools
+    │   ├── reports.py                           # Collection Reports & Tax Tools
+    │   ├── complaints.py                        # Complaint Ticket Tracking Tools
+    │   ├── lead.py                              # Enquiries, Leads & Follow-ups
+    │   ├── banking.py                           # Bank Accounts & Transactions
+    │   ├── expenses_income.py                   # Expense Ledger & Vendor Tools
+    │   ├── staff.py                             # Staff & Role Management Tools
+    │   ├── settings.py                          # Service Areas & Provider Tools
+    │   └── communication.py                     # SMS & WhatsApp Usage Logs
+    ├── chat-widget/                             # Embedded Frontend UI Components
+    │   └── chat.html                            # Iframe Widget with CryptoJS Token Decryption
+    └── tests/                                   # Automated Integration Test Suite
+        ├── test_agent_pipeline.py               # E2E Pipeline Verification Suite
+        ├── test_chat_integration.py             # FastAPI Chat Endpoint Integration Tests
+        ├── test_db_agent.py                     # MySQL DB Agent Execution Tests
+        └── test_pronoun_resolution.py           # Pronoun Resolver Unit Tests
+```
 
 ---
 
-## 4. How Data Truncation and Resolution Were Fixed
+## 🔒 Multi-Tenant Auth & Security Model
 
-*   **Customer Matching Resolution**: General searches (e.g. `"show details of subscriber 1322"`) are cleaned up by stripping prefixes (e.g., `"subscriber "`), querying `"1322"` directly. General listing commands (like `"show customer names"`) bypass the search query checks and return the paginated customer counts.
-*   **Complaints Payload Fix**: The complaints API returns a large list of forum replies, bloat, and `user` sub-records. This previously caused the end of the JSON payload (which contained `status_count`) to get truncated by the 4,000-character formatter limit. The executor now filters the nested `'user'` dictionaries, leaving the payload small and readable, preserving the status count metrics (e.g., 86 Open, 34 In Progress) perfectly.
+The BillerQ AI Assistant uses a multi-layered security architecture designed to prevent unauthorized data access and cross-tenant data leakage:
+
+### 1. Dynamic Tenant Host Switching
+When authenticating, the API client posts credentials to the primary BillerQ login endpoint (`https://admin.billerq.com/public/api/login`). The backend payload contains the company tenant URL (e.g., `https://tenant-name.billerq.com`). The client updates its base URL dynamically, routing all subsequent requests directly to the dedicated company backend.
+
+### 2. Frontend Session Token Decryption & Forwarding
+The React frontend encrypts user session data into `localStorage` using CryptoJS AES encryption. The chat widget ([chat.html](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/chat-widget/chat.html)) decrypts the payload on initialization:
+```javascript
+const decrypted = CryptoJS.AES.decrypt(loginStr, 'ENCRYPTION_KEY').toString(CryptoJS.enc.Utf8);
+const loginData = JSON.parse(decrypted);
+const userToken = loginData.userToken;
+```
+The widget forwards the token via request headers (`billerq-token`, `Authorization: Bearer <userToken>`). The backend agent executes all API lookups strictly under the permissions of the logged-in administrator.
+
+### 3. Automatic 401 Interception & Re-Authentication
+If a request returns an HTTP `401 Unauthorized` status (indicating token expiry), `BillerQClient` intercepts the failure, acquires an async lock, invalidates the stale token, executes `_login()` to fetch a fresh token, and automatically retries the original request.
 
 ---
 
-## 5. Running Locally
+## ⚙️ Environment Configuration Reference
 
-To run the application locally, you need three services running:
+The system behavior is controlled by environment variables specified in [ai-agent/.env](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/.env):
 
-1.  **FastAPI Backend Server**:
-    ```bash
-    cd ai-agent
-    python -m uvicorn app:app --host 0.0.0.0 --port 8080 --reload
-    ```
-2.  **BillerQ React Frontend**:
-    ```bash
-    python -m http.server 3000 --directory build
-    ```
-3.  **Local LLM Service (Ollama)**:
-    Install [Ollama](https://ollama.com) and pull Qwen2.5:7b:
-    ```bash
-    ollama run qwen2.5:7b
-    ```
+```env
+# BillerQ API Configuration
+BILLERQ_API_BASE=https://admin.billerq.com/public/api
+BILLERQ_AUTO_LOGIN=true
+BILLERQ_INDUSTRY_ID=1
+DEMO_MODE=false
+
+# Daily Session Rate Limiter (0 = unlimited, e.g., 50 prompts/day)
+PROMPT_LIMIT_PER_DAY=0
+
+# LLM Provider Configuration (AWS Bedrock)
+MODEL_PROVIDER=bedrock
+AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY
+AWS_SECRET_ACCESS_KEY=YOUR_AWS_SECRET_KEY
+AWS_REGION=us-east-1
+BEDROCK_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0
+
+# Database Configuration (Hostinger MySQL)
+DB_HOST=srv1145.hstgr.io
+DB_PORT=3306
+DB_USER=u167254999_bqcustomerai
+DB_PASSWORD=YOUR_DB_PASSWORD
+DB_NAME=u167254999_BqCustomerAi
+```
+
+---
+
+## 🏭 Production Deployment & Frontend Integration
+
+### Phase A: Backend Deployment (FastAPI)
+
+1. **Host Server**: Deploy to AWS EC2, Elastic Beanstalk, or containerized via AWS ECS (Fargate).
+2. **AWS Bedrock IAM Security**: For production, avoid plain-text AWS keys in `.env`. Attach an IAM Role to your container/instance with the following inline policy:
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": [
+           "bedrock:InvokeModel",
+           "bedrock:InvokeModelWithResponseStream"
+         ],
+         "Resource": "*"
+       }
+     ]
+   }
+   ```
+3. **Production ASGI Server**: Run using Gunicorn with Uvicorn worker threads:
+   ```bash
+   gunicorn app:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8080
+   ```
+
+### Phase B: Frontend Integration (React / HTML)
+
+1. **Embed Widget Container**: Insert the chat iframe into your main layout template:
+   ```html
+   <div id="billerq-chatbot-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;">
+       <iframe src="/chat-widget/chat.html" id="chatbot-iframe" style="border: none; width: 400px; height: 600px; display: none;"></iframe>
+       <button id="chatbot-toggle-btn">💬 Chat</button>
+   </div>
+   ```
+2. **Listen for UI Redirection Events**: The widget emits postMessage events when users click action buttons:
+   ```javascript
+   window.addEventListener('message', (event) => {
+       if (event.data && event.data.type === 'BILLERQ_NAVIGATE') {
+           // Direct React Router navigation
+           history.push(event.data.url);
+       }
+   });
+   ```
+
+---
+
+## 🧪 Local Development & Automated Testing
+
+### Prerequisites
+* Python 3.10 or higher
+* Valid AWS Access Keys with Bedrock Claude access (or local test credentials)
+* Active BillerQ API backend or access credentials
+
+### Installation & Setup
+
+1. **Clone Repository & Navigate to Agent Core**:
+   ```bash
+   cd ai-agent
+   ```
+
+2. **Create & Activate Virtual Environment**:
+   ```bash
+   python -m venv venv
+   # On Windows:
+   .\venv\Scripts\activate
+   # On Linux/macOS:
+   source venv/bin/activate
+   ```
+
+3. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Launch the FastAPI Server**:
+   ```bash
+   uvicorn app:app --host 0.0.0.0 --port 8080 --reload
+   ```
+   * The API documentation will be available interactively at `http://localhost:8080/docs`.
+
+5. **Run the Test Suite**:
+   ```bash
+   pytest tests/
+   ```
+
+---
+
+## 📄 License & Maintainers
+
+This project is proprietary and confidential. Authorized strictly for use within the **BillerQ** platform ecosystem. All rights reserved.

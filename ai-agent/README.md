@@ -1,196 +1,123 @@
-# BillerQ AI Assistant — Architecture, Pipeline, and Production Integration Guide
+# BillerQ AI Assistant — Agent Core Technical & Integration Guide
 
-This guide describes the technical architecture, execution pipeline, codebase file roles, and step-by-step instructions to integrate and deploy the BillerQ AI Assistant into the production BillerQ application environment.
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![AWS Bedrock](https://img.shields.io/badge/AWS%20Bedrock-Claude%203.5%20%2F%20Haiku-FF9900?style=flat-square&logo=amazon-aws)](https://aws.amazon.com/bedrock/)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python)](https://www.python.org/)
+
+This sub-directory contains the core Python engine, FastAPI application, LLM driver wrappers, entity resolvers, and automated tool integrations for the **BillerQ AI Assistant**.
 
 ---
 
-## 1. System Architecture Overview
+## 🏗️ Architecture & Component Flow
 
-The assistant functions as a secure, multi-tenant conversational gateway to the BillerQ subscription and billing APIs. It acts as a middle layer between the BillerQ client interface and the core Laravel API backend.
+The agent operates as a stateful, multi-tenant middleware between the BillerQ web frontend (React/Blade) and the BillerQ Laravel REST API / MySQL database backend.
 
-```
-                  ┌──────────────────────────────────────────────┐
-                  │            BillerQ Frontend UI               │
-                  │   (Laravel Blade Views or React App Page)    │
-                  └──────────────────────┬───────────────────────┘
-                                         │
-                       Sends HTTP POST with prompt +
-                       active session authentication token
-                                         │
-                                         ▼
-                  ┌──────────────────────────────────────────────┐
-                  │          FastAPI Agent Server (app.py)       │
-                  │   - Daily Rate Limiter                       │
-                  │   - Pronoun/Context Resolver                 │
-                  └──────────────────────┬───────────────────────┘
-                                         │
-                                         ▼
-                  ┌──────────────────────────────────────────────┐
-                  │       Agent Orchestrator (agent_loop.py)      │
-                  │   - Routes prompt via Bedrock Router         │
-                  │   - Invokes target API Tools                 │
-                  │   - Runs Response Formatter Rules            │
-                  └─────────┬──────────────────────────┬─────────┘
-                            │                          │
-           Predict intent /                          Execute HTTP
-           Format markdown                           API request
-                            │                          │
-                            ▼                          ▼
-                  ┌──────────────────┐       ┌──────────────────┐
-                  │   AWS Bedrock    │       │   BillerQ Core   │
-                  │   Claude Haiku   │       │   Laravel API    │
-                  └──────────────────┘       └──────────────────┘
+```mermaid
+graph TD
+    A[User Message Input] --> B[Step 1: Session Retrieval & Pronoun Resolver]
+    B --> C[Step 2: Hybrid Intent Router]
+    C -->|Fast Regex Match| D[Fast Route: Predefined Metric Intent]
+    C -->|LLM Classification| E[Bedrock Route: Claude Intent & Argument Extraction]
+    D --> F[Step 3: Customer & Catalog Resolver]
+    E --> F
+    F -->|Exact match on Name/Phone/SubID| G[Step 4: API & DB Executor]
+    F -->|Multiple candidates found| H[Return Candidate Navigation Options]
+    F -->|Fallback Match on Product Catalog| I[Return Package Specs & Redirect Route]
+    G --> J[Step 5: API Payload Sanitization & Truncation Shield]
+    J --> K[Step 6: Hybrid Formatter]
+    K -->|Simple intent| L[Template-based Response]
+    K -->|Complex analytics| M[LLM Prompt Generation & Table/Markdown Formatting]
+    L --> N[Compile JSON Response Payload + UI Redirect Metadata]
+    M --> N
+    N --> O[HTTP JSON Response Payload to Widget]
 ```
 
 ---
 
-## 2. Codebase Directory & Key Files Reference
+## 📂 Sub-Directory File Reference
 
-Here is a breakdown of every file in the AI Agent project and its role in the pipeline:
+All files in the `ai-agent` core and their specific roles:
 
-### Core Server & Configuration
-*   **[app.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/app.py)**
-    *   *Role*: FastAPI web application server entry point.
-    *   *Usage*: Exposes the `/chat` POST endpoint for frontend integration. It handles CORS, acts as a security guard (pronoun resolution, safety keywords), tracks message sessions, and runs the daily prompt rate limiter per session.
-*   **[requirements.txt](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/requirements.txt)**
-    *   *Role*: Package dependency configuration.
-    *   *Usage*: List of python libraries required for deployment (`fastapi`, `uvicorn`, `boto3`, `httpx`, `python-dotenv`, `pydantic`). **Ollama dependencies have been completely removed** to enforce enterprise AWS Bedrock integration.
-*   **[.env](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/.env)**
-    *   *Role*: Configuration profile.
-    *   *Usage*: Stores API hosts, AWS credentials, model configurations, and daily prompt limit configurations.
+### Server & Global App Setup
+*   **[app.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/app.py)** — FastAPI application server entry point. Exposes `POST /chat`, handles CORS, implements daily session rate limiting, and maps UI redirect metadata (`_resolve_redirection_metadata`).
+*   **[config.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/config.py)** — Configuration variables loader reading from `.env`.
+*   **[database.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/database.py)** — Hostinger MySQL connection manager and session connection pool handler.
+*   **[auth_db.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/auth_db.py)** — User authentication state and DB session logging logic.
+*   **[tools_db.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/tools_db.py)** — Direct SQL query execution tools for advanced DB queries.
+*   **[schema_docs.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/schema_docs.py)** — Database table schemas and entity relationship metadata for the LLM.
+*   **[.env](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/.env)** — System credentials (AWS Bedrock keys, MySQL host/user/pass, API base URL).
+*   **[requirements.txt](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/requirements.txt)** — Core Python dependencies (`fastapi`, `uvicorn`, `boto3`, `httpx`, `python-dotenv`, `pydantic`, `mysql-connector-python`).
 
-### Agent Logic (`agent/` folder)
-*   **[agent/agent_loop.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/agent/agent_loop.py)**
-    *   *Role*: E2E Agent Runner and Controller.
-    *   *Usage*: Receives a prompt, calls the `Planner` to identify the intent and required tool, runs the `Resolver` to clean parameters, invokes the target function from the `tools/` folder, and formats the output into markdown lists using specific UI rules.
-*   **[agent/planner.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/agent/planner.py)**
-    *   *Role*: Intent and Parameter Extractor.
-    *   *Usage*: Routes the user's message through the Bedrock LLM. Instructs Claude to output a structured JSON indicating the predicted tool function (e.g. `get_staff`) and parameters. Contains a regex safety layer for fast-matching standard dashboard lookups.
-*   **[agent/resolver.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/agent/resolver.py)**
-    *   *Role*: Database Entity Matcher.
-    *   *Usage*: Maps vague references (like customer names, package names) to exact database IDs by doing soft/partial lookups on BillerQ.
-*   **[agent/formatter.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/agent/formatter.py)**
-    *   *Role*: Conversational Text Formatter.
-    *   *Usage*: Uses AWS Bedrock to format final messages, resolve company questions (like BillerQ founders), or translate errors into friendly conversation.
-*   **[agent/memory.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/agent/memory.py)**
-    *   *Role*: In-memory conversation state.
-    *   *Usage*: Maintains recent thread history to allow follow-up questions (e.g. "what is his package?"), matching "his" to the customer retrieved in the previous turn.
+### Agent Core Logic (`agent/` folder)
+*   **[agent/agent_loop.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/agent/agent_loop.py)** — Primary agent execution loop (`BillerQAgent`), tying together planning, resolution, execution, payload pruning, and response generation.
+*   **[agent/planner.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/agent/planner.py)** — Intent classifier using AWS Bedrock Claude models to transform user prompts into structured JSON plans.
+*   **[agent/resolver.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/agent/resolver.py)** — Resolves ambiguous subscriber references (subscriber ID, phone number, partial names) with fallbacks to package/addon catalogs.
+*   **[agent/executor.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/agent/executor.py)** — Maps resolved plans to tool executions in `tools/` or `tools_db.py`.
+*   **[agent/formatter.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/agent/formatter.py)** — Formats raw JSON output into human-readable Markdown tables, lists, and summary statistics.
+*   **[agent/memory.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/agent/memory.py)** — In-memory session manager (`ConversationMemory`), handling pronoun resolution across consecutive user turns.
+*   **[agent/analyzer.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/agent/analyzer.py)** — Data sanitization layer that caps JSON payload sizes (4000 char shield) and extracts top pagination metrics.
+*   **[agent/reasoner.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/agent/reasoner.py)** — Multi-step reasoning pipeline for complex analytical tasks.
+*   **[agent/query_processor.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/agent/query_processor.py)** — Input query normalizer and keyword extractor.
+*   **[agent/analytics.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/agent/analytics.py)** — Financial metrics calculation engine (sums, method breakdowns, collections).
+*   **[agent/route_manager.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/agent/route_manager.py)** — Dynamic React router link resolver.
 
-### API & Tools Layer
-*   **[api/client.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/api/client.py)**
-    *   *Role*: Low-level HTTP Client.
-    *   *Usage*: Wraps client calls to the BillerQ Laravel endpoints. Configured to override base URLs and header auth tokens dynamically per request to ensure isolation between multi-tenant users.
-*   **[tools/](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/tools/) folder**
-    *   *Role*: Individual API wrappers mapping python tools to Laravel controller endpoints:
-        *   `customer.py`: Lookups, status counts.
-        *   `payment.py`: Overdue lists, invoice records.
-        *   `reports.py`: Dashboard overview, agent collection breakdown.
-        *   `complaints.py`: Complaint ticket tracking.
-        *   `staff.py`: Staff list records.
-        *   `subscription.py`: Package & add-on listings.
+### Tool Integrations (`tools/` folder)
+*   **[tools/customer.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/tools/customer.py)** — Customer search, profile fetch, STB/Modem lookups, status counts.
+*   **[tools/payment.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/tools/payment.py)** — Payment logs, invoice lists, overdues, unpaid customer queries.
+*   **[tools/subscription.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/tools/subscription.py)** — Package catalog, add-on lookups, item listings.
+*   **[tools/reports.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/tools/reports.py)** — Collection reports, tax summaries, agent leaderboards.
+*   **[tools/complaints.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/tools/complaints.py)** — Complaint ticket tracking and status analytics.
+*   **[tools/lead.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/tools/lead.py)** — Lead manager, enquiries, and follow-up tracking.
+*   **[tools/banking.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/tools/banking.py)** — Bank accounts and transaction history.
+*   **[tools/expenses_income.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/tools/expenses_income.py)** — Vendor expense logs and income summary tools.
+*   **[tools/staff.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/tools/staff.py)** — User roles and staff listings.
+*   **[tools/settings.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/tools/settings.py)** — Service areas and provider settings.
+*   **[tools/communication.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/tools/communication.py)** — SMS/WhatsApp usage logs.
 
-### LLM Interface Layer
-*   **[llm/base.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/llm/base.py)**
-    *   *Role*: Abstract LLM base definition.
-*   **[llm/bedrock_provider.py](file:///c:/Users/Lenovo/Desktop/Chatbot/ai-agent/llm/bedrock_provider.py)**
-    *   *Role*: Bedrock API Client integration.
-    *   *Usage*: Sends structured prompt instructions to Claude 3 Haiku (`anthropic.claude-3-haiku-20240307-v1:0`) and extracts text or structural JSON responses.
+### LLM Interface Layer (`llm/` folder)
+*   **[llm/base.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/llm/base.py)** — Abstract LLM driver base class.
+*   **[llm/bedrock_provider.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/llm/bedrock_provider.py)** — AWS Bedrock client implementation supporting Anthropic Claude 3.5 / Haiku models.
+*   **[llm/groq_provider.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/llm/groq_provider.py)** — Alternative Groq provider driver implementation.
+
+### API Layer (`api/` folder)
+*   **[api/client.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/api/client.py)** — Async HTTP client with connection pooling, multi-tenant host redirection, token overrides, and 401 automatic retry locks.
+*   **[api/registry.py](file:///c:/Users/advai/Desktop/BILLERQQ/ai-agent/api/registry.py)** — Endpoint route mapping dictionary for BillerQ Laravel REST API endpoints.
 
 ---
 
-## 3. End-to-End Prompt Execution Pipeline
+## ⚡ Execution Pipeline Details
 
-Here is what happens step-by-step when a user submits a prompt (e.g., *"who collected the most money this month"*):
+When a request is submitted to `POST /chat`:
 
-1.  **Ingestion**: The frontend widget catches the user prompt and sends it as a POST request to `/chat` along with the user's active BillerQ JWT token.
-2.  **Rate Limiter**: `app.py` checks the sliding 24-hour rate limit configured by `PROMPT_LIMIT_PER_DAY`. If verified, the request is allowed.
-3.  **Context Resolution**: `memory.py` resolves pronouns using history. (e.g., if the user previously searched for "Ashika", a prompt like "her details" is expanded to "Ashika's details").
-4.  **Intent Parsing**: `agent_loop.py` invokes `planner.py` which passes the prompt to Claude via `bedrock_provider.py`. The LLM returns a structured tool prediction:
-    ```json
-    {
-      "tool": "get_agent_collection_report",
-      "args": {}
-    }
-    ```
-5.  **Execution**: The agent runs `get_agent_collection_report` inside `tools/reports.py`. This queries the Laravel database `/admin/get-agent-wise-collection-report` using the dynamically set authorization headers of the active tenant.
-6.  **Aggregation & Verification**: The raw API returns a list of recent payment logs. The agent-loop executes mathematical aggregation rules to compute the sum per agent (e.g., `Other/Direct: ₹6,369.64`, `Ashika raj: ₹2,942.22`), verifying the leader mathematically.
-7.  **Formatting**: The formatted markdown block is built (with green/red status indicators, bold totals, and layout constraints) and returned back to `app.py`.
-8.  **Redirect Routing**: `app.py` resolves the intent and appends a React Router redirection URL (e.g., `redirect_url: "/report/payment-collection"`, `redirect_label: "View collections"`) to the JSON payload.
-9.  **Delivery**: The frontend widget receives the JSON, appends the chat response block, and adds a shortcut button to jump directly to the Payment Collection page on the BillerQ dashboard.
+1. **Ingestion & Rate Limit Check**:
+   `app.py` receives the JSON request with `message`, `session_id`, and `billerq_token`. If `PROMPT_LIMIT_PER_DAY` is set, it verifies that the session hasn't exceeded its allowance.
 
----
+2. **Session Memory & Pronoun Resolution**:
+   `memory_manager.get_session(session_id)` loads session context. `ConversationMemory.resolve_pronoun()` scans the prompt for pronouns (*"his"*, *"her"*, *"their"*) and replaces them with the stored target entity name.
 
-## 4. Production Integration & Deployment Guide
+3. **Hybrid Intent Routing**:
+   The prompt is passed to `Planner.plan()`. Fast regex rules attempt to match known metrics instantly. If unmatched, AWS Bedrock Claude parses the prompt and generates a structured JSON execution plan containing `intent`, `entities`, and `args`.
 
-To deploy the assistant into the real BillerQ site, perform the following steps:
+4. **Entity Resolution**:
+   If an entity (customer/subscriber) is required, `Resolver.resolve_customer()` performs sanitized search queries. If no customer matches, it cascades to scan packages, add-ons, and items in the catalog.
 
-### Phase A: Deploying the AI Agent Backend (Python/FastAPI)
+5. **Tool Execution & Sanitization**:
+   `Executor.execute()` dispatches the request to the mapped function in `tools/` (or `tools_db.py`). Responses are passed through `analyzer.py` to prune bulky fields (e.g. comment logs) and enforce payload limits (4000 chars).
 
-1.  **Hosting Options**: Host the FastAPI application on **AWS EC2**, **AWS Elastic Beanstalk**, or containerized inside **AWS ECS (Fargate)**.
-2.  **AWS Bedrock IAM Policy**:
-    Instead of exposing AWS Access Key credentials in `.env`, assign an **IAM Instance Profile** or **ECS Task Role** to the server with the following policy:
-    ```json
-    {
-      "Version": "2012-10-17",
-      "Statement": [
-        {
-          "Effect": "Allow",
-          "Action": [
-            "bedrock:InvokeModel",
-            "bedrock:InvokeModelWithResponseStream"
-          ],
-          "Resource": "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-haiku-20240307-v1:0"
-        }
-      ]
-    }
-    ```
-    This grants the hosted FastAPI server secure, passwordless authorization to Bedrock.
-3.  **Environment Setup**:
-    Configure environment variables on your server console:
-    *   `AWS_REGION=us-east-1`
-    *   `BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0`
-    *   `BILLERQ_API_BASE=https://admin.billerq.com/public/api` (The core Laravel backend endpoint)
-    *   `PROMPT_LIMIT_PER_DAY=50` (or your preferred daily token saving limit)
-4.  **Process Manager**:
-    Run using a production process manager like `Gunicorn` with `Uvicorn` workers:
-    ```bash
-    pip install gunicorn
-    gunicorn app:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8080
-    ```
+6. **Response Generation & UI Link Injection**:
+   `Formatter.format_response()` converts the raw data into clean Markdown formatting. `app.py` resolves matching React routes via `_resolve_redirection_metadata()` and returns the final JSON response payload.
 
 ---
 
-### Phase B: Integrating the Chat Widget into BillerQ Frontend (React/HTML)
+## 🧪 Testing
 
-To put the chat widget on the real site:
+To run unit and integration tests:
 
-1.  **Include the Chat Asset**:
-    Copy the files from `chat-widget/` (including `chat.html`, stylesheet assets, and the iframe wrapper) into the public folder of your BillerQ React or Blade frontend build.
-2.  **Add Chat Widget Element to the Global Template**:
-    Embed the widget globally at the bottom of your main layout file (e.g. `index.html`, or Laravel's `layouts/app.blade.php` layout template):
-    ```html
-    <div id="billerq-chatbot-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;">
-        <!-- Chat widget iframe wrapper -->
-        <iframe src="/chat-widget/chat.html" style="border: none; width: 400px; height: 600px; display: none;" id="chatbot-iframe"></iframe>
-        <button id="chatbot-toggle-btn" style="border-radius: 50%; padding: 15px; background: #007bff; border: none; cursor: pointer;">
-            <!-- chatbot bubble icon -->
-        </button>
-    </div>
-    ```
-3.  **Pass Credentials Dynamically (Crucial for Security)**:
-    Modify the chat widget's JavaScript initialization inside `chat.js` to extract parameters from the parent window's authentication store (e.g. LocalStorage/Redux):
-    ```javascript
-    // Automatically retrieve current user's session variables
-    const token = localStorage.getItem("billerq_token"); // Active session JWT
-    const apiUrl = window.location.origin + "/api";      // Dynamically resolves host URL
-    const roleId = JSON.parse(localStorage.getItem("user")).role_id; // Current user role
-    
-    // Inject variables into HTTP header when posting prompts to /chat endpoint:
-    headers: {
-      "Content-Type": "application/json",
-      "billerq-token": token,
-      "billerq-api-url": apiUrl,
-      "billerq-user-role": roleId
-    }
-    ```
-    This removes any hardcoded credentials. The chatbot acts as a proxy, executing calls strictly on behalf of the logged-in administrator using their actual permissions.
+```bash
+pytest tests/
+```
+
+Individual test targets:
+* `pytest tests/test_agent_pipeline.py` — Tests end-to-end pipeline execution.
+* `pytest tests/test_chat_integration.py` — Tests FastAPI `/chat` endpoint.
+* `pytest tests/test_pronoun_resolution.py` — Tests pronoun memory resolution.

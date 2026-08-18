@@ -225,5 +225,25 @@ LEARNED_ROUTES = {
         "tool": "get_packages",
         "arguments": {},
         "customer_name": None
+    },
+    "recurring invoice": {
+        "tool": "get_recurring_data",
+        "arguments": {},
+        "customer_name": None
+    },
+    "give all the complaints given by jinto": {
+        "tool": "get_complaints",
+        "arguments": {},
+        "customer_name": "Jinto"
+    },
+    "complaints by testaplha": {
+        "tool": "get_complaints",
+        "arguments": {},
+        "customer_name": "testaplha"
+    },
+    "jinto": {
+        "tool": "get_customer_profile",
+        "arguments": {},
+        "customer_name": "jinto"
     }
 }
